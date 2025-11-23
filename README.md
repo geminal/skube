@@ -12,7 +12,16 @@ If you have Go installed:
 go install github.com/geminal/skube/cmd/skube@latest
 ```
 
-Ensure your `$GOPATH/bin` is in your `$PATH`.
+Make sure `~/go/bin` is in your PATH. Add this to your `~/.zshrc` or `~/.bashrc`:
+
+```bash
+export PATH="$HOME/go/bin:$PATH"
+```
+
+Then reload your shell:
+```bash
+source ~/.zshrc  # or source ~/.bashrc
+```
 
 ### Option 2: Pre-built Binaries
 

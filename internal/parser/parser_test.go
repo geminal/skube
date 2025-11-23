@@ -82,6 +82,14 @@ func TestParseNaturalLanguage(t *testing.T) {
 				SearchTerm: "error",
 			},
 		},
+		{
+			name: "dry run flag",
+			args: []string{"get", "pods", "--dry-run"},
+			expected: Context{
+				Command: "pods",
+				DryRun:  true,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -120,6 +128,9 @@ func TestParseNaturalLanguage(t *testing.T) {
 			}
 			if ctx.SearchTerm != tt.expected.SearchTerm {
 				t.Errorf("expected search term %s, got %s", tt.expected.SearchTerm, ctx.SearchTerm)
+			}
+			if ctx.DryRun != tt.expected.DryRun {
+				t.Errorf("expected dry run %v, got %v", tt.expected.DryRun, ctx.DryRun)
 			}
 		})
 	}

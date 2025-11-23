@@ -715,6 +715,7 @@ func PrintHelp() {
   %ssearch%s        Filter logs by keyword
   %sfind%s          Same as search
   %sget last N%s    Show last N lines of logs
+  %s--dry-run%s     Show kubectl command without executing
 
 %sEXAMPLES:%s
   %s# Investigation%s
@@ -754,6 +755,7 @@ func PrintHelp() {
 		config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset,
 		config.ColorYellow, config.ColorReset,
+		config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset,

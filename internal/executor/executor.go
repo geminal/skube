@@ -12,6 +12,12 @@ import (
 )
 
 func ExecuteCommand(ctx *parser.Context) error {
+	// Sanitize inputs
+	ctx.SearchTerm = sanitizeInput(ctx.SearchTerm)
+	ctx.FilePath = sanitizeInput(ctx.FilePath)
+	ctx.SourcePath = sanitizeInput(ctx.SourcePath)
+	ctx.DestPath = sanitizeInput(ctx.DestPath)
+
 	if ctx.Command == "" {
 		PrintHelp()
 		return nil
@@ -40,6 +46,16 @@ func ExecuteCommand(ctx *parser.Context) error {
 		return handleDeployments(ctx)
 	case "namespaces":
 		return handleNamespaces(ctx)
+	case "nodes":
+		return handleNodes(ctx)
+	case "configmaps":
+		return handleConfigMaps(ctx)
+	case "secrets":
+		return handleSecrets(ctx)
+	case "ingresses":
+		return handleIngresses(ctx)
+	case "pvcs":
+		return handlePVCs(ctx)
 	case "status":
 		return handleStatus(ctx)
 	case "events":
@@ -282,6 +298,47 @@ func handleNamespaces(ctx *parser.Context) error {
 	return runKubectl([]string{"get", "namespaces"}, ctx.DryRun)
 }
 
+func handleNodes(ctx *parser.Context) error {
+	fmt.Printf("%s🖥️  Listing nodes%s\n", config.ColorCyan, config.ColorReset)
+	return runKubectl([]string{"get", "nodes", "-o", "wide"}, ctx.DryRun)
+}
+
+func handleConfigMaps(ctx *parser.Context) error {
+	kubectlArgs := []string{"get", "configmaps"}
+	if ctx.Namespace != "" {
+		kubectlArgs = append(kubectlArgs, "-n", ctx.Namespace)
+	}
+	fmt.Printf("%s📄 Listing configmaps%s\n", config.ColorCyan, config.ColorReset)
+	return runKubectl(kubectlArgs, ctx.DryRun)
+}
+
+func handleSecrets(ctx *parser.Context) error {
+	kubectlArgs := []string{"get", "secrets"}
+	if ctx.Namespace != "" {
+		kubectlArgs = append(kubectlArgs, "-n", ctx.Namespace)
+	}
+	fmt.Printf("%s🔒 Listing secrets%s\n", config.ColorCyan, config.ColorReset)
+	return runKubectl(kubectlArgs, ctx.DryRun)
+}
+
+func handleIngresses(ctx *parser.Context) error {
+	kubectlArgs := []string{"get", "ingress"}
+	if ctx.Namespace != "" {
+		kubectlArgs = append(kubectlArgs, "-n", ctx.Namespace)
+	}
+	fmt.Printf("%s🌐 Listing ingresses%s\n", config.ColorCyan, config.ColorReset)
+	return runKubectl(kubectlArgs, ctx.DryRun)
+}
+
+func handlePVCs(ctx *parser.Context) error {
+	kubectlArgs := []string{"get", "pvc"}
+	if ctx.Namespace != "" {
+		kubectlArgs = append(kubectlArgs, "-n", ctx.Namespace)
+	}
+	fmt.Printf("%s💾 Listing persistent volume claims%s\n", config.ColorCyan, config.ColorReset)
+	return runKubectl(kubectlArgs, ctx.DryRun)
+}
+
 func handleApply(ctx *parser.Context) error {
 	if ctx.FilePath == "" {
 		return fmt.Errorf("need file path\nUsage: skube apply file <filename>")
@@ -501,6 +558,58 @@ func runKubectlPiped(kubectlArgs []string, grepArgs []string, dryRun bool) error
 	return grepCmd.Wait()
 }
 
+func sanitizeInput(input string) string {
+	if input == "" {
+		return ""
+	}
+
+	// Trim whitespace
+	input = strings.TrimSpace(input)
+
+	// Block dangerous shell characters that could be used for injection
+	// Even though exec.Command passes args safely, we want defense in depth
+	dangerousChars := []string{
+		";",    // Command separator
+		"&",    // Background/AND operator
+		"|",    // Pipe operator
+		"$",    // Variable expansion
+		"`",    // Command substitution
+		"\\",   // Escape character (in some contexts)
+		"\n",   // Newline
+		"\r",   // Carriage return
+		"\x00", // Null byte
+	}
+
+	for _, char := range dangerousChars {
+		if strings.Contains(input, char) {
+			// Return empty string if dangerous characters detected
+			// This is safer than trying to escape, as it prevents any potential bypass
+			return ""
+		}
+	}
+
+	// Check for command substitution patterns
+	if strings.Contains(input, "$(") || strings.Contains(input, "${") {
+		return ""
+	}
+
+	// Prevent flag injection: if input starts with -, prepend with ./
+	// This ensures it's treated as a path/argument, not a flag
+	if strings.HasPrefix(input, "-") {
+		// For file paths, make it explicit
+		// For search terms, the caller should handle this with -- separator
+		input = "./" + input
+	}
+
+	// Limit length to prevent DoS
+	maxLength := 1024
+	if len(input) > maxLength {
+		input = input[:maxLength]
+	}
+
+	return input
+}
+
 func getZshCompletion() string {
 	return `#compdef skube
 
@@ -547,15 +656,49 @@ _skube() {
         'svc:Shorthand for services'
     )
 
-    local -a common_namespaces
-    common_namespaces=(
-        'production'
-        'staging'
-        'qa'
-        'dev'
-        'prod'
-        'test'
-    )
+    # Dynamic completion helpers - query actual Kubernetes cluster
+    _skube_get_namespaces() {
+        kubectl get namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+    }
+
+    _skube_get_pods() {
+        local namespace="$1"
+        if [[ -n "$namespace" ]]; then
+            kubectl get pods -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+        else
+            kubectl get pods --all-namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+        fi
+    }
+
+    _skube_get_deployments() {
+        local namespace="$1"
+        if [[ -n "$namespace" ]]; then
+            kubectl get deployments -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+        else
+            kubectl get deployments --all-namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+        fi
+    }
+
+    _skube_get_services() {
+        local namespace="$1"
+        if [[ -n "$namespace" ]]; then
+            kubectl get services -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+        else
+            kubectl get services --all-namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+        fi
+    }
+
+    # Extract namespace from previous words if present
+    _skube_extract_namespace() {
+        local i
+        for ((i = 2; i < CURRENT; i++)); do
+            if [[ "${words[i]}" == "in" && $((i + 1)) < CURRENT ]]; then
+                echo "${words[i+1]}"
+                return
+            fi
+        done
+        echo ""
+    }
 
     local -a log_options
     log_options=(
@@ -592,15 +735,36 @@ _skube() {
                 get)
                     _describe 'resource' resources
                     ;;
-                pods|pod|deployments|deploy|services|svc)
-                    compadd of in
-                    _values 'namespace' "${common_namespaces[@]}"
+                pods|pod)
+                    compadd of in app
+                    # Dynamically suggest namespaces
+                    local -a namespaces
+                    namespaces=(${(f)"$(_skube_get_namespaces)"})
+                    _values 'namespace' "${namespaces[@]}"
+                    ;;
+                deployments|deploy)
+                    compadd in
+                    local -a namespaces
+                    namespaces=(${(f)"$(_skube_get_namespaces)"})
+                    _values 'namespace' "${namespaces[@]}"
+                    ;;
+                services|svc)
+                    compadd in
+                    local -a namespaces
+                    namespaces=(${(f)"$(_skube_get_namespaces)"})
+                    _values 'namespace' "${namespaces[@]}"
                     ;;
                 of)
                     # After "of", suggest app names (user types them)
                     ;;
+                app)
+                    # After "app", suggest nothing (user types app name)
+                    ;;
                 in)
-                    _values 'namespace' "${common_namespaces[@]}"
+                    # Dynamically suggest namespaces
+                    local -a namespaces
+                    namespaces=(${(f)"$(_skube_get_namespaces)"})
+                    _values 'namespace' "${namespaces[@]}"
                     ;;
                 namespaces|ns)
                     ;;
@@ -610,7 +774,9 @@ _skube() {
                         _contains_word "services" "${words[@]}" || _contains_word "svc" "${words[@]}") && \
                        _contains_word "of" "${words[@]}"; then
                         compadd in
-                        _values 'namespace' "${common_namespaces[@]}"
+                        local -a namespaces
+                        namespaces=(${(f)"$(_skube_get_namespaces)"})
+                        _values 'namespace' "${namespaces[@]}"
                     fi
                     ;;
             esac
@@ -619,25 +785,40 @@ _skube() {
         logs)
             case "$prev" in
                 logs)
-                    compadd of from
+                    compadd of from app pod
+                    # Suggest pods from current context
+                    local -a pods
+                    pods=(${(f)"$(_skube_get_pods)"})
+                    compadd "${pods[@]}"
                     ;;
-                of)
-                    # After "of", user types app name
+                of|app)
+                    # After "of" or "app", user types app name (no autocomplete for app labels)
                     ;;
                 from)
-                    compadd pod
+                    compadd pod app
                     ;;
                 pod)
+                    # Suggest actual pods
+                    local namespace=$(_skube_extract_namespace)
+                    local -a pods
+                    pods=(${(f)"$(_skube_get_pods \"$namespace\")"})
+                    compadd "${pods[@]}"
                     ;;
                 *)
-                    if _contains_word "of" "${words[@]}" || _contains_word "pod" "${words[@]}"; then
+                    if _contains_word "of" "${words[@]}" || _contains_word "pod" "${words[@]}" || _contains_word "app" "${words[@]}"; then
                         if ! _contains_word "in" "${words[@]}"; then
                             compadd in
                         fi
                         _describe 'log options' log_options
-                        _values 'namespace' "${common_namespaces[@]}"
+                        local -a namespaces
+                        namespaces=(${(f)"$(_skube_get_namespaces)"})
+                        _values 'namespace' "${namespaces[@]}"
                     else
-                        compadd of from
+                        compadd of from app pod
+                        # Suggest pods
+                        local -a pods
+                        pods=(${(f)"$(_skube_get_pods)"})
+                        compadd "${pods[@]}"
                     fi
                     ;;
             esac
@@ -666,13 +847,32 @@ _skube() {
             case "$prev" in
                 restart)
                     compadd deployment pod
+                    # Suggest deployments and pods
+                    local -a deployments pods
+                    deployments=(${(f)"$(_skube_get_deployments)"})
+                    pods=(${(f)"$(_skube_get_pods)"})
+                    compadd "${deployments[@]}" "${pods[@]}"
                     ;;
-                deployment|pod)
+                deployment)
+                    # Suggest actual deployments
+                    local namespace=$(_skube_extract_namespace)
+                    local -a deployments
+                    deployments=(${(f)"$(_skube_get_deployments \"$namespace\")"})
+                    compadd "${deployments[@]}"
+                    ;;
+                pod)
+                    # Suggest actual pods
+                    local namespace=$(_skube_extract_namespace)
+                    local -a pods
+                    pods=(${(f)"$(_skube_get_pods \"$namespace\")"})
+                    compadd "${pods[@]}"
                     ;;
                 *)
                     if _contains_word "deployment" "${words[@]}" || _contains_word "pod" "${words[@]}"; then
                         compadd in
-                        _values 'namespace' "${common_namespaces[@]}"
+                        local -a namespaces
+                        namespaces=(${(f)"$(_skube_get_namespaces)"})
+                        _values 'namespace' "${namespaces[@]}"
                     fi
                     ;;
             esac
@@ -682,10 +882,20 @@ _skube() {
             case "$prev" in
                 scale)
                     compadd deployment
+                    # Suggest actual deployments
+                    local -a deployments
+                    deployments=(${(f)"$(_skube_get_deployments)"})
+                    compadd "${deployments[@]}"
                     ;;
                 deployment)
+                    # Suggest actual deployments
+                    local namespace=$(_skube_extract_namespace)
+                    local -a deployments
+                    deployments=(${(f)"$(_skube_get_deployments \"$namespace\")"})
+                    compadd "${deployments[@]}"
                     ;;
                 to)
+                    # User types number
                     ;;
                 *)
                     if _contains_word "deployment" "${words[@]}"; then
@@ -694,7 +904,9 @@ _skube() {
                         elif ! _contains_word "in" "${words[@]}"; then
                             compadd in
                         else
-                            _values 'namespace' "${common_namespaces[@]}"
+                            local -a namespaces
+                            namespaces=(${(f)"$(_skube_get_namespaces)"})
+                            _values 'namespace' "${namespaces[@]}"
                         fi
                     fi
                     ;;

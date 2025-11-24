@@ -1,5 +1,5 @@
 # Binaries
-skube
+/skube
 *.exe
 *.exe~
 *.dll

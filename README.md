@@ -50,6 +50,8 @@ skube get namespaces
 
 ## Autocomplete
 
+`skube` features **smart autocomplete** that queries your actual Kubernetes cluster!
+
 ### Zsh
 
 Add this to your `~/.zshrc`:
@@ -64,6 +66,26 @@ Add this to your `~/.bashrc`:
 
 ```bash
 source <(skube completion bash)
+```
+
+### What Makes It Smart?
+
+Unlike traditional autocomplete, `skube` **dynamically queries your cluster** to suggest:
+
+- ✅ **Real namespaces** from your cluster (not hardcoded `prod`, `staging`)
+- ✅ **Real pods** when you type `skube logs <TAB>`
+- ✅ **Real deployments** when you type `skube restart deployment <TAB>`
+- ✅ **Context-aware suggestions** - if you specify a namespace, it only shows resources from that namespace
+
+**Example:**
+```bash
+$ skube logs pod <TAB>
+# Shows: nginx-7d8b49557c-abc12  redis-6b8f9c-def34  ...
+# (your actual pods!)
+
+$ skube pods in <TAB>
+# Shows: default  kube-system  production  my-app-namespace  ...
+# (your actual namespaces!)
 ```
 
 

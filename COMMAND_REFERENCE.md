@@ -45,7 +45,7 @@ Complete mapping of skube conversational commands to kubectl equivalents.
 | `skube logs of myapp in prod follow` | `kubectl logs -l app=myapp -f -n prod` |
 | `skube logs of api in prod follow with prefix` | `kubectl logs -l app=api -f --prefix=true -n prod` |
 | `skube logs of backend in staging with prefix` | `kubectl logs -l app=backend --prefix=true -n staging` |
-| `skube logs of webapp in production follow max 30` | `kubectl logs -l app=webapp -f --max-log-requests=30 -n hdc` |
+| `skube logs of webapp in production follow max 30` | `kubectl logs -l app=webapp -f --max-log-requests=30 -n namespace` |
 
 ### Search Logs
 
@@ -188,6 +188,16 @@ kubectl get pods -l app=myservice -n qa -o wide
 |----------|-------------------|
 | `skube get all` | `kubectl get all -o wide` |
 | `skube get all in production` | `kubectl get all -n production -o wide` |
+
+### More Resources
+
+| skube | kubectl equivalent |
+|----------|-------------------|
+| `skube get nodes` | `kubectl get nodes -o wide` |
+| `skube get configmaps in prod` | `kubectl get configmaps -n prod` |
+| `skube get secrets in qa` | `kubectl get secrets -n qa` |
+| `skube get ingress in staging` | `kubectl get ingress -n staging` |
+| `skube get pvc in dev` | `kubectl get pvc -n dev` |
 
 ---
 

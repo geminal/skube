@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2025-11-25
+
+### Added
+- **Version Command**: Added `skube --version`, `-v`, and `version` commands to display the current version.
+- **Help Text Updates**: Updated `skube help` to list all supported resources (nodes, configmaps, secrets, ingresses, pvcs).
+
+### Documentation
+- **README**: Complete overhaul with all commands, natural language features, and dynamic completion details.
+
 ## [0.2.0] - 2025-11-25
 
 ### Added

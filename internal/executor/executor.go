@@ -1083,6 +1083,11 @@ func PrintHelp() {
   %spods%s          Running pod instances
   %sdeployments%s   Deployment configurations
   %sservices%s      Service endpoints
+  %snodes%s         Cluster nodes
+  %sconfigmaps%s    Configuration data (cm)
+  %ssecrets%s       Sensitive data
+  %singresses%s     Ingress resources (ing)
+  %spvcs%s          PersistentVolumeClaims (pvc)
   %sapp%s           Filter by application label
   %spod%s           Specific pod name
 
@@ -1143,8 +1148,6 @@ func PrintHelp() {
 		config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorYellow, config.ColorReset,
 		config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset,

@@ -49,6 +49,12 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Check for version flag
+	if os.Args[1] == "--version" || os.Args[1] == "-v" || os.Args[1] == "version" {
+		executor.PrintVersion()
+		os.Exit(0)
+	}
+
 	args := os.Args[1:]
 	ctx := parser.ParseNaturalLanguage(args)
 

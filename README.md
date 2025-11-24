@@ -1,4 +1,4 @@
-# skube
+# skube (Simple Kube)
 
 Talk to Kubernetes in plain English. No more remembering complex kubectl syntax - just say what you want!
 

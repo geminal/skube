@@ -4,7 +4,7 @@ Talk to Kubernetes in plain English. No more remembering complex kubectl syntax 
 
 ## Installation
 
-### Option 1: Go Install (Recommended for Go developers)
+### Option 1: Go Install (Recommended)
 
 If you have Go installed:
 

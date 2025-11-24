@@ -30,3 +30,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Local development
+TODO.md

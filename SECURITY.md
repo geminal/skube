@@ -19,7 +19,7 @@ Please do not report security vulnerabilities through public GitHub issues.
 
 ### 2. Report Privately
 
-Send an email to: **[your-email@example.com]** (replace with your actual email)
+Send an email to: **geminal@duck.com**
 
 Include:
 - Description of the vulnerability

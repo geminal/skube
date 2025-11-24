@@ -48,6 +48,20 @@ func ExecuteCommand(ctx *parser.Context) error {
 		return handleAll(ctx)
 	case "completion":
 		return handleCompletion(ctx)
+	case "apply":
+		return handleApply(ctx)
+	case "delete":
+		return handleDelete(ctx)
+	case "edit":
+		return handleEdit(ctx)
+	case "config":
+		return handleConfig(ctx)
+	case "metrics":
+		return handleMetrics(ctx)
+	case "copy":
+		return handleCopy(ctx)
+	case "explain":
+		return handleExplain(ctx)
 	case "update":
 		return handleUpdate()
 	case "help":
@@ -268,6 +282,105 @@ func handleNamespaces(ctx *parser.Context) error {
 	return runKubectl([]string{"get", "namespaces"}, ctx.DryRun)
 }
 
+func handleApply(ctx *parser.Context) error {
+	if ctx.FilePath == "" {
+		return fmt.Errorf("need file path\nUsage: skube apply file <filename>")
+	}
+
+	kubectlArgs := []string{"apply", "-f", ctx.FilePath}
+	fmt.Printf("%s📝 Applying configuration from: %s%s\n", config.ColorYellow, ctx.FilePath, config.ColorReset)
+	return runKubectl(kubectlArgs, ctx.DryRun)
+}
+
+func handleDelete(ctx *parser.Context) error {
+	if ctx.ResourceType == "" || ctx.ResourceName == "" {
+		return fmt.Errorf("need resource type and name\nUsage: skube delete <resource> <name> in <namespace>")
+	}
+
+	kubectlArgs := []string{"delete", ctx.ResourceType, ctx.ResourceName}
+	if ctx.Namespace != "" {
+		kubectlArgs = append(kubectlArgs, "-n", ctx.Namespace)
+	}
+
+	fmt.Printf("%s🗑️  Deleting %s: %s%s\n", config.ColorRed, ctx.ResourceType, ctx.ResourceName, config.ColorReset)
+	return runKubectl(kubectlArgs, ctx.DryRun)
+}
+
+func handleEdit(ctx *parser.Context) error {
+	if ctx.ResourceType == "" || ctx.ResourceName == "" {
+		return fmt.Errorf("need resource type and name\nUsage: skube edit <resource> <name> in <namespace>")
+	}
+
+	kubectlArgs := []string{"edit", ctx.ResourceType, ctx.ResourceName}
+	if ctx.Namespace != "" {
+		kubectlArgs = append(kubectlArgs, "-n", ctx.Namespace)
+	}
+
+	fmt.Printf("%s✏️  Editing %s: %s%s\n", config.ColorYellow, ctx.ResourceType, ctx.ResourceName, config.ColorReset)
+	return runKubectl(kubectlArgs, ctx.DryRun)
+}
+
+func handleConfig(ctx *parser.Context) error {
+	if ctx.ResourceType == "view" {
+		fmt.Printf("%s⚙️  Current Configuration%s\n", config.ColorCyan, config.ColorReset)
+		return runKubectl([]string{"config", "view", "--minify"}, ctx.DryRun)
+	} else if ctx.ResourceType == "context" {
+		if ctx.ResourceName == "" {
+			return fmt.Errorf("need context name\nUsage: skube use context <name>")
+		}
+		fmt.Printf("%s🔄 Switching to context: %s%s\n", config.ColorYellow, ctx.ResourceName, config.ColorReset)
+		return runKubectl([]string{"config", "use-context", ctx.ResourceName}, ctx.DryRun)
+	} else if ctx.ResourceType == "namespace" {
+		if ctx.ResourceName == "" {
+			return fmt.Errorf("need namespace name\nUsage: skube use namespace <name>")
+		}
+		fmt.Printf("%s🔄 Switching default namespace to: %s%s\n", config.ColorYellow, ctx.ResourceName, config.ColorReset)
+		return runKubectl([]string{"config", "set-context", "--current", "--namespace=" + ctx.ResourceName}, ctx.DryRun)
+	}
+	return fmt.Errorf("unknown config command")
+}
+
+func handleMetrics(ctx *parser.Context) error {
+	kubectlArgs := []string{"top"}
+
+	if ctx.ResourceType == "nodes" {
+		kubectlArgs = append(kubectlArgs, "nodes")
+		fmt.Printf("%s📊 Node Metrics%s\n", config.ColorCyan, config.ColorReset)
+	} else {
+		// Default to pods
+		kubectlArgs = append(kubectlArgs, "pods")
+		if ctx.Namespace != "" {
+			kubectlArgs = append(kubectlArgs, "-n", ctx.Namespace)
+		}
+		fmt.Printf("%s📊 Pod Metrics%s\n", config.ColorCyan, config.ColorReset)
+	}
+
+	return runKubectl(kubectlArgs, ctx.DryRun)
+}
+
+func handleCopy(ctx *parser.Context) error {
+	if ctx.SourcePath == "" || ctx.DestPath == "" {
+		return fmt.Errorf("need source and destination\nUsage: skube copy file <src> to <dest>")
+	}
+
+	kubectlArgs := []string{"cp", ctx.SourcePath, ctx.DestPath}
+	if ctx.Namespace != "" {
+		kubectlArgs = append(kubectlArgs, "-n", ctx.Namespace)
+	}
+
+	fmt.Printf("%s📂 Copying %s to %s%s\n", config.ColorYellow, ctx.SourcePath, ctx.DestPath, config.ColorReset)
+	return runKubectl(kubectlArgs, ctx.DryRun)
+}
+
+func handleExplain(ctx *parser.Context) error {
+	if ctx.ResourceType == "" {
+		return fmt.Errorf("need resource type\nUsage: skube explain <resource>")
+	}
+
+	fmt.Printf("%s📖 Explaining %s%s\n", config.ColorCyan, ctx.ResourceType, config.ColorReset)
+	return runKubectl([]string{"explain", ctx.ResourceType}, ctx.DryRun)
+}
+
 func handleCompletion(ctx *parser.Context) error {
 	shell := ctx.ResourceType
 	if shell == "" {
@@ -316,10 +429,42 @@ func runKubectl(args []string, dryRun bool) error {
 		return nil
 	}
 	cmd := exec.Command("kubectl", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	return cmd.Run()
+
+	// Interactive or streaming commands need direct IO
+	isInteractive := false
+	if len(args) > 0 {
+		if args[0] == "exec" || args[0] == "edit" || args[0] == "run" || args[0] == "attach" || args[0] == "port-forward" {
+			isInteractive = true
+		}
+	}
+	for _, arg := range args {
+		if arg == "-f" || arg == "--follow" || arg == "-w" || arg == "--watch" {
+			isInteractive = true
+		}
+	}
+
+	if isInteractive {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+		return cmd.Run()
+	}
+
+	// Capture output for analysis
+	output, err := cmd.CombinedOutput()
+	fmt.Print(string(output))
+
+	if err != nil {
+		return err
+	}
+
+	// Check for empty results on success
+	outStr := string(output)
+	if strings.TrimSpace(outStr) == "" || strings.Contains(outStr, "No resources found") {
+		fmt.Printf("\n%s⚠️  Tip: No resources found. Please check if the app label or namespace is correct.%s\n", config.ColorYellow, config.ColorReset)
+	}
+
+	return nil
 }
 
 func runKubectlPiped(kubectlArgs []string, grepArgs []string, dryRun bool) error {
@@ -378,7 +523,13 @@ _skube() {
         'rollback:Rollback a deployment'
         'forward:Port forward to a service'
         'describe:Describe a resource'
-        'show:Show status or events'
+        'show:Show status, events, or metrics'
+        'apply:Apply configuration from file'
+        'delete:Delete resources'
+        'edit:Edit resources'
+        'config:Manage configuration'
+        'copy:Copy files'
+        'explain:Resource documentation'
         'completion:Generate completion script'
         'update:Update skube to latest version'
         'help:Show help message'
@@ -634,9 +785,9 @@ _skube_completions() {
     local cur prev words cword
     _init_completion || return
 
-    local commands="get logs shell restart scale rollback forward describe show completion update help"
-    local keywords="of from in into pod deployment service namespace to port follow prefix with search find get last"
-    local resources="namespaces pods deployments services status events"
+    local commands="get logs shell restart scale rollback forward describe show completion update help apply delete edit config metrics copy explain"
+    local keywords="of from in into pod deployment service namespace to port follow prefix with search find get last file context"
+    local resources="namespaces pods deployments services status events nodes"
     local namespaces="production staging qa dev prod test"
 
     case "${prev}" in
@@ -644,18 +795,26 @@ _skube_completions() {
             COMPREPLY=($(compgen -W "${commands}" -- "${cur}"))
             return 0
             ;;
-        get)
+        get|delete|edit|explain)
             COMPREPLY=($(compgen -W "${resources}" -- "${cur}"))
             return 0
             ;;
-        logs|shell|restart|describe|scale|rollback|forward)
+        logs|shell|restart|describe|scale|rollback|forward|apply|copy|metrics)
             COMPREPLY=($(compgen -W "${keywords}" -- "${cur}"))
             return 0
             ;;
         show)
-            COMPREPLY=($(compgen -W "status events" -- "${cur}"))
+            COMPREPLY=($(compgen -W "status events metrics config" -- "${cur}"))
             return 0
             ;;
+        config)
+             COMPREPLY=($(compgen -W "use view" -- "${cur}"))
+             return 0
+             ;;
+        use)
+             COMPREPLY=($(compgen -W "context namespace" -- "${cur}"))
+             return 0
+             ;;
         of|from|in|into)
             COMPREPLY=($(compgen -W "pod deployment service namespace ${namespaces}" -- "${cur}"))
             return 0
@@ -697,7 +856,13 @@ func PrintHelp() {
   %srollback%s    Rollback deployment to previous version
   %sforward%s     Port forward to a service
   %sdescribe%s    Show detailed resource information
-  %sshow%s        Display cluster status or events
+  %sshow%s        Display cluster status, events, or metrics
+  %sapply%s       Apply configuration from file
+  %sdelete%s      Delete resources
+  %sedit%s        Edit resources
+  %sconfig%s      Manage configuration (context/namespace)
+  %scopy%s        Copy files to/from pods
+  %sexplain%s     Documentation for resources
   %scompletion%s  Generate shell completion script (zsh, bash)
   %supdate%s      Update skube to latest version
 
@@ -725,12 +890,19 @@ func PrintHelp() {
   skube logs from app %s<app-name>%s in %s<namespace>%s follow with prefix
   skube logs from pod %s<pod-name>%s get last 100 in %s<namespace>%s
   skube logs from pod %s<pod-name>%s search "%serror%s" in %s<namespace>%s
+  skube show metrics pods in %s<namespace>%s
+  skube explain pod
 
   %s# Operations%s
   skube shell into pod %s<pod-name>%s in %s<namespace>%s
   skube restart deployment %s<name>%s in %s<namespace>%s
   skube scale deployment %s<name>%s to %s<N>%s in %s<namespace>%s
   skube forward service %s<name>%s port %s<port>%s in %s<namespace>%s
+  skube apply file %s<filename>%s
+  skube delete pod %s<name>%s in %s<namespace>%s
+  skube copy file %s<src>%s to %s<dest>%s in %s<namespace>%s
+  skube use context %s<name>%s
+  skube use namespace %s<name>%s
 `,
 		config.ColorGreen, config.ColorReset,
 		config.ColorYellow, config.ColorReset,
@@ -747,6 +919,12 @@ func PrintHelp() {
 		config.ColorCyan, config.ColorReset,
 		config.ColorCyan, config.ColorReset,
 		config.ColorCyan, config.ColorReset,
+		config.ColorCyan, config.ColorReset,
+		config.ColorCyan, config.ColorReset,
+		config.ColorCyan, config.ColorReset,
+		config.ColorCyan, config.ColorReset,
+		config.ColorCyan, config.ColorReset,
+		config.ColorCyan, config.ColorReset,
 		config.ColorYellow, config.ColorReset,
 		config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset,
@@ -768,12 +946,16 @@ func PrintHelp() {
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorRed, config.ColorReset, config.ColorBlue, config.ColorReset,
 		config.ColorGreen, config.ColorReset,
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
+		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
+		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
+		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
+		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
+		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
 	)
 
 	fmt.Print(help)

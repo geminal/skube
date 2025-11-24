@@ -194,6 +194,7 @@ skube scale deployment backend to 3 in staging
 skube rollback deployment api in staging
 ```
 
+
 ### Service Operations
 
 ```bash
@@ -208,11 +209,74 @@ skube forward service backend port 3000 in staging
 skube describe service api in qa
 ```
 
+### Additional Resources
+
+```bash
+# Nodes
+skube get nodes
+skube describe node worker-1
+
+# ConfigMaps
+skube get configmaps in production
+skube get cm in qa  # shorthand
+
+# Secrets
+skube get secrets in staging
+
+# Ingress
+skube get ingresses in production
+skube get ing in qa  # shorthand
+
+# PersistentVolumeClaims
+skube get pvcs in production
+skube get pvc in staging  # shorthand
+```
+
+### Configuration & Management
+
+```bash
+# Apply configuration
+skube apply file deployment.yaml
+skube create from file config.yaml
+
+# Edit resources
+skube edit deployment api in production
+skube edit service backend in staging
+
+# Delete resources
+skube delete pod mypod in qa
+skube delete deployment old-app in staging
+
+# Context/Namespace management
+skube use context production-cluster
+skube use namespace staging
+skube show config
+
+# Copy files to/from pods
+skube copy file local.txt to /tmp/remote.txt in qa
+skube cp /tmp/remote.txt to local.txt in production
+
+# Resource documentation
+skube explain pod
+skube what is service
+skube what is ingress
+```
+
+### Metrics & Monitoring
+
+```bash
+# Resource metrics
+skube show metrics pods in production
+skube check usage nodes
+skube check usage pods in qa
+```
+
 ### Cluster Info
 
 ```bash
 # Show status
 skube show status in production
+skube get all in qa
 
 # Show events
 skube show events in qa
@@ -266,19 +330,55 @@ skube show events in production
 - kubectl must be installed and configured
 - Active Kubernetes context
 
-## Natural Language Keywords
+## Natural Language Features
 
-skube understands these natural language patterns:
+### Talk Naturally
 
-- **Actions**: `get`, `logs`, `shell`, `restart`, `scale`, `forward`, `describe`, `show`
-- **Prepositions**: `of`, `from`, `in`, `into`, `with`
-- **Resources**: `pod`, `deployment`, `service`, `namespace`
+`skube` understands conversational English! You can use:
+
+**Filler words** (automatically ignored):
+- `the`, `a`, `an`, `please`, `me`, `for`, `my`, `our`
+
+**Command synonyms**:
+- `list`, `show`, `give`, `fetch` → `get`
+- `tail`, `monitor` → `logs`
+- `ssh`, `connect` → `shell`
+- `change`, `modify` → `edit`
+- `remove`, `destroy` → `delete`
+- `reboot`, `bounce` → `restart`
+
+**Examples:**
+```bash
+# All of these work!
+skube please get the pods
+skube show me logs for myapp
+skube list all deployments in qa
+skube give me the status
+skube restart the backend deployment in staging
+skube ssh into pod mypod
+```
+
+### Simplified Syntax
+
+Prepositions are optional! These are equivalent:
+
+```bash
+# Traditional (still works)
+skube get pods in qa
+skube logs of app myapp in production
+
+# Simplified (new!)
+skube pods qa
+skube logs myapp production
+skube logs app myapp qa
+```
+
+### Keywords Reference
+
+- **Actions**: `get`, `logs`, `shell`, `restart`, `scale`, `forward`, `describe`, `show`, `apply`, `delete`, `edit`, `copy`, `explain`
+- **Prepositions**: `of`, `from`, `in`, `into`, `with`, `to`
+- **Resources**: `pod`, `deployment`, `service`, `namespace`, `node`, `configmap`, `secret`, `ingress`, `pvc`
 - **Modifiers**: `follow`, `prefix`, `search`, `find`, `last`, `max`
-
-Mix and match them naturally:
-- `skube get pods of myapp in qa`
-- `skube logs of api in prod follow with prefix`
-- `skube logs from pod xyz get last 100 in staging`
 
 ## Tips
 
@@ -293,30 +393,36 @@ Mix and match them naturally:
 - **Many pods** - Use `max 30` to increase concurrent log stream limit (default is 5)
 - **Dry Run** - Use `--dry-run` to see the kubectl command without executing it
 
-## Autocomplete
+## Advanced Features
 
-Autocomplete is enabled automatically during installation. It suggests:
+### Smart Autocomplete
+
+Press TAB to see suggestions from your **actual cluster**:
 - **Commands**: `get`, `logs`, `shell`, `restart`, `scale`, etc.
 - **Keywords**: `of`, `from`, `in`, `pod`, `deployment`, `service`, etc.
 - **Resources**: `namespaces`, `pods`, `deployments`, `services`
-- **Common namespaces**: `production`, `staging`, `qa`, `dev`, `prod`
+- **Real namespaces**: From your cluster (not hardcoded!)
+- **Real pods**: From your cluster
+- **Real deployments**: From your cluster
 
 **Try it:**
 ```bash
 skube <TAB><TAB>
 skube get <TAB><TAB>
 skube logs <TAB><TAB>
-skube logs of myapp in <TAB><TAB>
+skube logs pod <TAB><TAB>  # Shows YOUR actual pods!
+skube pods in <TAB><TAB>   # Shows YOUR actual namespaces!
 ```
 
 ## Contributing
 
-Contributions are welcome! To add new commands:
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on:
 
-1. Add handler function in `main.go`
-2. Add case in `executeCommand()` switch statement
-3. Update help text in `printHelp()`
-4. Update this README
+- Development setup
+- Coding standards
+- Testing requirements
+- Pull request process
+- How to add new commands and resources
 
 ## License
 

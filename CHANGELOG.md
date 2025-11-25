@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2025-11-25
+
+### Fixed
+- Version command now works properly through parser and executor, not just the early check in main
+
 ## [0.2.2] - 2025-11-25
 
 ### Added
@@ -77,7 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration management
 - Shell completion for zsh and bash
 
-[Unreleased]: https://github.com/geminal/skube/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/geminal/skube/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/geminal/skube/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/geminal/skube/compare/v0.2.0...v0.2.2
 [0.2.0]: https://github.com/geminal/skube/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/geminal/skube/releases/tag/v0.1.0

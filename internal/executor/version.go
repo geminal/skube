@@ -6,7 +6,7 @@ import (
 	"github.com/geminal/skube/internal/config"
 )
 
-const Version = "0.2.2"
+const Version = "0.2.3"
 
 func PrintVersion() {
 	fmt.Printf("%sskube%s version %s%s%s\n",

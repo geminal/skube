@@ -80,6 +80,9 @@ func ExecuteCommand(ctx *parser.Context) error {
 		return handleExplain(ctx)
 	case "update":
 		return handleUpdate()
+	case "version":
+		PrintVersion()
+		return nil
 	case "help":
 		PrintHelp()
 		return nil

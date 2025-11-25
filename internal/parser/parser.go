@@ -69,6 +69,7 @@ func ParseNaturalLanguage(args []string) *Context {
 var commandAliases = map[string]string{
 	"completion": "completion",
 	"update":     "update",
+	"version":    "version", "-v": "version", "--version": "version",
 	"help":       "help", "-h": "help", "--help": "help",
 	"apply": "apply", "create": "apply",
 	"delete": "delete", "remove": "delete", "destroy": "delete",

@@ -1161,6 +1161,8 @@ func PrintHelp() {
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
+		config.ColorBlue, config.ColorReset, config.ColorGreen, config.ColorReset, config.ColorBlue, config.ColorReset,
+		config.ColorBlue, config.ColorReset,
 		config.ColorGreen, config.ColorReset,
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
@@ -1170,7 +1172,9 @@ func PrintHelp() {
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
+		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
+		config.ColorBlue, config.ColorReset,
+		config.ColorBlue, config.ColorReset,
 	)
 
 	fmt.Print(help)

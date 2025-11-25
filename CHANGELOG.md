@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Version Command**: Added `skube --version`, `-v`, and `version` commands to display the current version.
 - **Help Text Updates**: Updated `skube help` to list all supported resources (nodes, configmaps, secrets, ingresses, pvcs).
 
+### Fixed
+- Fixed fmt.Sprintf argument count mismatch in help text causing build failure
+
 ### Documentation
 - **README**: Complete overhaul with all commands, natural language features, and dynamic completion details.
 
@@ -74,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration management
 - Shell completion for zsh and bash
 
-[Unreleased]: https://github.com/geminal/skube/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/geminal/skube/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/geminal/skube/compare/v0.2.0...v0.2.2
 [0.2.0]: https://github.com/geminal/skube/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/geminal/skube/releases/tag/v0.1.0

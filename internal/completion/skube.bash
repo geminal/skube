@@ -1,33 +1,6 @@
 #!/bin/bash
 # Bash completion for skube
 
-_skube_cache_get() {
-    local key="$1"
-    local cmd="$2"
-    local cache_dir="${TMPDIR:-/tmp}/skube-cache"
-    local cache_file="$cache_dir/$key"
-    local now=$(date +%s)
-
-    mkdir -p "$cache_dir"
-
-    if [[ -f "$cache_file" ]]; then
-        local mtime
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            mtime=$(stat -f %m "$cache_file")
-        else
-            mtime=$(stat -c %Y "$cache_file" 2>/dev/null)
-        fi
-        
-        if [[ -n "$mtime" && $((now - mtime)) -lt 5 ]]; then
-            cat "$cache_file"
-            return
-        fi
-    fi
-
-    eval "$cmd" > "$cache_file" 2>/dev/null
-    cat "$cache_file"
-}
-
 _skube_completions()
 {
     local cur prev
@@ -48,8 +21,29 @@ _skube_completions()
             return 0
             ;;
         in|from)
-            # Suggest namespaces
-            local namespaces=$(_skube_cache_get "namespaces" "kubectl get namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null")
+            # Suggest namespaces with simple caching
+            local cache_file="${TMPDIR:-/tmp}/skube-cache/namespaces"
+            local now=$(date +%s)
+            
+            if [[ -f "$cache_file" ]]; then
+                local mtime
+                if [[ "$OSTYPE" == "darwin"* ]]; then
+                    mtime=$(stat -f %m "$cache_file" 2>/dev/null)
+                else
+                    mtime=$(stat -c %Y "$cache_file" 2>/dev/null)
+                fi
+                
+                if [[ -n "$mtime" && $((now - mtime)) -lt 5 ]]; then
+                    local namespaces=$(cat "$cache_file")
+                    COMPREPLY=( $(compgen -W "${namespaces}" -- ${cur}) )
+                    return 0
+                fi
+            fi
+            
+            # Fetch and cache
+            mkdir -p "${TMPDIR:-/tmp}/skube-cache"
+            local namespaces=$(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+            echo "$namespaces" > "$cache_file"
             COMPREPLY=( $(compgen -W "${namespaces}" -- ${cur}) )
             return 0
             ;;

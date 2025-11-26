@@ -43,7 +43,106 @@ _skube() {
         'svc:Shorthand for services'
     )
 
-    # ... (fetch functions and cache helper are already defined above) ...
+    # Caching helper
+    _skube_cache_get() {
+        local key="$1"
+        local func="$2"
+        shift 2
+        local cache_dir="${TMPDIR:-/tmp}/skube-cache"
+        local cache_file="$cache_dir/$key"
+        local now=$(date +%s)
+
+        mkdir -p "$cache_dir"
+
+        if [[ -f "$cache_file" ]]; then
+            local mtime
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                mtime=$(stat -f %m "$cache_file")
+            else
+                mtime=$(stat -c %Y "$cache_file" 2>/dev/null)
+            fi
+            
+            if [[ -n "$mtime" && $((now - mtime)) -lt 5 ]]; then
+                cat "$cache_file"
+                return
+            fi
+        fi
+
+        "$func" "$@" > "$cache_file" 2>/dev/null
+        cat "$cache_file"
+    }
+
+    # Fetch functions
+    _skube_fetch_namespaces() {
+        kubectl get namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+    }
+
+    _skube_fetch_apps() {
+        local namespace="$1"
+        if [[ -n "$namespace" ]]; then
+            kubectl get pods -n "$namespace" -o jsonpath='{.items[*].metadata.labels.app}' 2>/dev/null | tr ' ' '\n' | sort -u | grep -v '^$'
+        else
+            if ! kubectl get pods --all-namespaces -o jsonpath='{.items[*].metadata.labels.app}' 2>/dev/null | tr ' ' '\n' | sort -u | grep -v '^$'; then
+                kubectl get pods -o jsonpath='{.items[*].metadata.labels.app}' 2>/dev/null | tr ' ' '\n' | sort -u | grep -v '^$'
+            fi
+        fi
+    }
+
+    _skube_fetch_pods() {
+        local namespace="$1"
+        if [[ -n "$namespace" ]]; then
+            kubectl get pods -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+        else
+            kubectl get pods --all-namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+        fi
+    }
+
+    _skube_fetch_deployments() {
+        local namespace="$1"
+        if [[ -n "$namespace" ]]; then
+            kubectl get deployments -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+        else
+            kubectl get deployments --all-namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+        fi
+    }
+
+    _skube_fetch_services() {
+        local namespace="$1"
+        if [[ -n "$namespace" ]]; then
+            kubectl get services -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+        else
+            kubectl get services --all-namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
+        fi
+    }
+
+    # Dynamic completion helpers - query actual Kubernetes cluster
+    _skube_get_namespaces() {
+        _skube_cache_get "namespaces" _skube_fetch_namespaces
+    }
+
+    _skube_get_apps() {
+        local namespace="$1"
+        local cache_key="apps_${namespace:-all}"
+        _skube_cache_get "$cache_key" _skube_fetch_apps "$namespace"
+    }
+
+    _skube_get_pods() {
+        local namespace="$1"
+        local cache_key="pods_${namespace:-all}"
+        _skube_cache_get "$cache_key" _skube_fetch_pods "$namespace"
+    }
+
+    _skube_get_deployments() {
+        local namespace="$1"
+        local cache_key="deployments_${namespace:-all}"
+        _skube_cache_get "$cache_key" _skube_fetch_deployments "$namespace"
+    }
+
+    _skube_get_services() {
+        local namespace="$1"
+        local cache_key="services_${namespace:-all}"
+        _skube_cache_get "$cache_key" _skube_fetch_services "$namespace"
+    }
 
     # Extract namespace from previous words if present
     _skube_extract_namespace() {

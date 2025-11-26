@@ -12,6 +12,9 @@ builds:
       - windows
       - darwin
     main: ./cmd/skube
+    ldflags:
+      - -s -w
+      - -X github.com/geminal/skube/internal/help.Version={{.Version}}
 
 archives:
   - name_template: >-

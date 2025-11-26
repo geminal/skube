@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.9] - TBD
+
+### Changed
+- **Build System**: Automated version management using ldflags - version now automatically injected from Git tags during releases
+- **Cleanup**: Removed obsolete `internal/executor/version.go` file
+
+## [0.2.8] - 2025-11-26
+
+### Fixed
+- **Zsh Completion**: Fixed `_describe` errors and bad substitution issues in Zsh completion script
+- **Bash Completion**: Improved Bash completion script reliability and error handling
+
+## [0.2.6] - 2025-11-26
+
+### Fixed
+- **Completion**: Additional fixes for shell completion edge cases
+
+## [0.2.5] - 2025-11-26
+
+### Fixed
+- **Completion**: Improved shell completion stability and error handling
+
 ## [0.2.4] - 2025-11-26
 
 ### Fixed

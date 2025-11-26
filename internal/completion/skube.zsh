@@ -205,48 +205,36 @@ _skube() {
                     fi
                     ;;
                 logs)
-                    # "skube logs ..."
+                    # "skube logs in <namespace> ..." - namespace-first syntax
                     if [[ $CURRENT -eq 2 ]]; then
-                        # suggest "from", "of", "in" or app names directly?
-                        # Let's suggest keywords
-                        local -a keywords
-                        keywords=('from:Source' 'of:App source' 'in:Namespace context')
-                        _describe "keyword" keywords
-                    else
-                        case "${words[CURRENT-1]}" in
-                            from)
-                                local -a types
-                                types=('app:Application' 'pod:Specific Pod')
-                                _describe "type" types
-                                ;;
-                            of)
-                                # "logs of <app>"
-                                local namespace=$(_skube_extract_namespace)
-                                local -a apps
-                                apps=(${(f)"$(_skube_get_apps "$namespace")"})
-                                compadd "${apps[@]}"
-                                ;;
+                        # Only suggest "in" to enforce namespace-first
+                        compadd "in"
+                    elif [[ $CURRENT -eq 3 && "${words[2]}" == "in" ]]; then
+                        # After "in", suggest namespaces
+                        local -a namespaces
+                        namespaces=(${(f)"$(_skube_get_namespaces)"})
+                        compadd "${namespaces[@]}"
+                    elif [[ $CURRENT -eq 4 && "${words[2]}" == "in" ]]; then
+                        # After namespace, suggest "from"
+                        compadd "from"
+                    elif [[ $CURRENT -eq 5 && "${words[4]}" == "from" ]]; then
+                        # After "from", suggest app or pod
+                        local -a types
+                        types=('app:Application' 'pod:Specific Pod')
+                        _describe "type" types
+                    elif [[ $CURRENT -eq 6 ]]; then
+                        # After type (app/pod), suggest actual resources from namespace
+                        local namespace="${words[3]}"
+                        case "${words[5]}" in
                             app)
-                                # After "app", suggest actual app names from cluster
-                                local namespace=$(_skube_extract_namespace)
                                 local -a apps
                                 apps=(${(f)"$(_skube_get_apps "$namespace")"})
                                 compadd "${apps[@]}"
-                                ;;
-                            in)
-                                # suggest namespaces
-                                local -a namespaces
-                                namespaces=(${(f)"$(_skube_get_namespaces)"})
-                                compadd "${namespaces[@]}"
                                 ;;
                             pod)
-                                # After "pod" keyword, suggest actual pod names from namespace
-                                local namespace=$(_skube_extract_namespace)
-                                if [[ -n "$namespace" ]]; then
-                                    local -a pods
-                                    pods=(${(f)"$(_skube_get_pods "$namespace")"})
-                                    compadd "${pods[@]}"
-                                fi
+                                local -a pods
+                                pods=(${(f)"$(_skube_get_pods "$namespace")"})
+                                compadd "${pods[@]}"
                                 ;;
                         esac
                     fi

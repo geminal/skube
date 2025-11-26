@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.9] - TBD
+## [0.2.9] - 2025-11-26
 
 ### Changed
 - **Build System**: Automated version management using ldflags - version now automatically injected from Git tags during releases

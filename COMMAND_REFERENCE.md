@@ -29,12 +29,14 @@ Complete mapping of skube conversational commands to kubectl equivalents.
 | `skube get pods of myapp` | `kubectl get pods -l app=myapp -o wide` |
 | `skube get pods of myapp in qa` | `kubectl get pods -l app=myapp -n qa -o wide` |
 | `skube pods in staging` | `kubectl get pods -n staging -o wide` |
+| `skube in qa get pods` | `kubectl get pods -n qa -o wide` |
 
 ### View Logs
 
 | skube | kubectl equivalent |
 |----------|-------------------|
 | `skube logs from pod api-abc123 in qa` | `kubectl logs api-abc123 -n qa` |
+| `skube logs of pod api-abc123 in qa` | `kubectl logs api-abc123 -n qa` |
 | `skube logs from pod api-abc123 in qa follow` | `kubectl logs api-abc123 -f -n qa` |
 | `skube logs from pod api-abc123 get last 100 in qa` | `kubectl logs api-abc123 --tail=100 -n qa` |
 

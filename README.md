@@ -112,6 +112,19 @@ Talk to Kubernetes naturally:
 # Instead of: kubectl get namespaces
 skube get namespaces
 
+### Namespace Patterns
+- `in production`
+- `from production`
+- `in production namespace`
+- `from production namespace`
+- `-n production` (traditional flag style)
+
+### Namespace First (New!)
+You can now start your command with the namespace context:
+- `skube in qa logs from app myapp`
+- `skube in qa logs of pod mypod`
+- `skube in production get pods`
+- `skube in staging restart deployment api`
 # Instead of: kubectl get pods -n production
 skube get pods from production namespace
 
@@ -165,6 +178,7 @@ skube get pods of myapp in qa
 
 # View logs
 skube logs from pod api-abc123 in staging
+skube logs of pod api-abc123 in staging
 skube logs from pod api-abc123 in staging follow
 
 # Shell into pod

@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/geminal/skube/internal/completion"
 	"github.com/geminal/skube/internal/config"
+	"github.com/geminal/skube/internal/help"
 	"github.com/geminal/skube/internal/parser"
 )
 
@@ -19,7 +21,7 @@ func ExecuteCommand(ctx *parser.Context) error {
 	ctx.DestPath = sanitizeInput(ctx.DestPath)
 
 	if ctx.Command == "" {
-		PrintHelp()
+		help.PrintHelp()
 		return nil
 	}
 
@@ -63,7 +65,7 @@ func ExecuteCommand(ctx *parser.Context) error {
 	case "all":
 		return handleAll(ctx)
 	case "completion":
-		return handleCompletion(ctx)
+		return completion.HandleCompletion(ctx)
 	case "apply":
 		return handleApply(ctx)
 	case "delete":
@@ -81,10 +83,10 @@ func ExecuteCommand(ctx *parser.Context) error {
 	case "update":
 		return handleUpdate()
 	case "version":
-		PrintVersion()
+		help.PrintVersion()
 		return nil
 	case "help":
-		PrintHelp()
+		help.PrintHelp()
 		return nil
 	default:
 		return fmt.Errorf("unknown command: %s\nRun 'skube help' for usage", ctx.Command)
@@ -441,24 +443,6 @@ func handleExplain(ctx *parser.Context) error {
 	return runKubectl([]string{"explain", ctx.ResourceType}, ctx.DryRun)
 }
 
-func handleCompletion(ctx *parser.Context) error {
-	shell := ctx.ResourceType
-	if shell == "" {
-		return fmt.Errorf("please specify shell type\nUsage: skube completion <zsh|bash>")
-	}
-
-	switch shell {
-	case "zsh":
-		fmt.Print(getZshCompletion())
-		return nil
-	case "bash":
-		fmt.Print(getBashCompletion())
-		return nil
-	default:
-		return fmt.Errorf("unsupported shell: %s\nSupported shells: zsh, bash", shell)
-	}
-}
-
 func handleUpdate() error {
 	fmt.Printf("%s🔄 Updating skube...%s\n", config.ColorCyan, config.ColorReset)
 
@@ -488,7 +472,6 @@ func runKubectl(args []string, dryRun bool) error {
 		fmt.Printf("kubectl %s\n", strings.Join(args, " "))
 		return nil
 	}
-	cmd := exec.Command("kubectl", args...)
 
 	// Interactive or streaming commands need direct IO
 	isInteractive := false
@@ -503,28 +486,115 @@ func runKubectl(args []string, dryRun bool) error {
 		}
 	}
 
+	// For interactive commands or commands that might trigger OIDC auth, use direct IO
 	if isInteractive {
+		cmd := exec.Command("kubectl", args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Stdin = os.Stdin
 		return cmd.Run()
 	}
 
-	// Capture output for analysis
-	output, err := cmd.CombinedOutput()
-	fmt.Print(string(output))
+	// For non-interactive commands, try with a timeout first to detect hanging
+	// If it might need auth, we'll switch to interactive mode
+	cmd := exec.Command("kubectl", args...)
+	cmd.Stdin = os.Stdin // Always pass stdin for potential OIDC auth
+
+	// Use pipes for stdout/stderr to capture and display
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	// Read and print output as it comes
+	go func() {
+		buf := make([]byte, 1024)
+		for {
+			n, err := stdout.Read(buf)
+			if n > 0 {
+				fmt.Print(string(buf[:n]))
+			}
+			if err != nil {
+				break
+			}
+		}
+	}()
+
+	go func() {
+		buf := make([]byte, 1024)
+		for {
+			n, err := stderr.Read(buf)
+			if n > 0 {
+				fmt.Fprint(os.Stderr, string(buf[:n]))
+			}
+			if err != nil {
+				break
+			}
+		}
+	}()
+
+	err = cmd.Wait()
 
 	if err != nil {
 		return err
 	}
 
-	// Check for empty results on success
-	outStr := string(output)
-	if strings.TrimSpace(outStr) == "" || strings.Contains(outStr, "No resources found") {
-		fmt.Printf("\n%s⚠️  Tip: No resources found. Please check if the app label or namespace is correct.%s\n", config.ColorYellow, config.ColorReset)
+	return nil
+}
+
+// isAuthenticationError checks if the error is related to authentication/authorization
+func isAuthenticationError(err error) bool {
+	if err == nil {
+		return false
 	}
 
-	return nil
+	errMsg := err.Error()
+	return containsAuthError(errMsg)
+}
+
+// containsAuthError checks if a string contains authentication error indicators
+func containsAuthError(msg string) bool {
+	authErrors := []string{
+		"Unauthorized",
+		"unauthorized",
+		"authentication",
+		"oidc",
+		"token",
+		"expired",
+		"invalid",
+		"forbidden",
+		"Unable to connect to the server",
+		"error: You must be logged in",
+		"OIDC",
+		"credentials",
+		"401",
+	}
+
+	for _, authErr := range authErrors {
+		if strings.Contains(msg, authErr) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// runKubectlWithAuth runs kubectl with direct IO to allow OIDC/Keycloak auth flow
+func runKubectlWithAuth(args []string) error {
+	cmd := exec.Command("kubectl", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+
+	return cmd.Run()
 }
 
 func runKubectlPiped(kubectlArgs []string, grepArgs []string, dryRun bool) error {
@@ -611,574 +681,4 @@ func sanitizeInput(input string) string {
 	}
 
 	return input
-}
-
-func getZshCompletion() string {
-	return `#compdef skube
-
-# Initialize completion system if not already done
-if [[ -z "$_comps" ]]; then
-    autoload -Uz compinit && compinit
-fi
-
-_skube() {
-    local curcontext="$curcontext" state line
-    typeset -A opt_args
-
-    local -a commands
-    commands=(
-        'get:Get resources (namespaces, pods, deployments, services)'
-        'logs:View logs from pods or apps'
-        'shell:Open shell in a pod'
-        'restart:Restart a pod or deployment'
-        'scale:Scale a deployment'
-        'rollback:Rollback a deployment'
-        'forward:Port forward to a service'
-        'describe:Describe a resource'
-        'show:Show status, events, or metrics'
-        'apply:Apply configuration from file'
-        'delete:Delete resources'
-        'edit:Edit resources'
-        'config:Manage configuration'
-        'copy:Copy files'
-        'explain:Resource documentation'
-        'completion:Generate completion script'
-        'update:Update skube to latest version'
-        'help:Show help message'
-    )
-
-    local -a resources
-    resources=(
-        'namespaces:List all namespaces (start here!)'
-        'pods:List all pods'
-        'deployments:List deployments'
-        'services:List services'
-        'ns:Shorthand for namespaces'
-        'pod:Shorthand for pods'
-        'deploy:Shorthand for deployments'
-        'svc:Shorthand for services'
-    )
-
-    # Dynamic completion helpers - query actual Kubernetes cluster
-    _skube_get_namespaces() {
-        kubectl get namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
-    }
-
-    _skube_get_pods() {
-        local namespace="$1"
-        if [[ -n "$namespace" ]]; then
-            kubectl get pods -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
-        else
-            kubectl get pods --all-namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
-        fi
-    }
-
-    _skube_get_deployments() {
-        local namespace="$1"
-        if [[ -n "$namespace" ]]; then
-            kubectl get deployments -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
-        else
-            kubectl get deployments --all-namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
-        fi
-    }
-
-    _skube_get_services() {
-        local namespace="$1"
-        if [[ -n "$namespace" ]]; then
-            kubectl get services -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
-        else
-            kubectl get services --all-namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n'
-        fi
-    }
-
-    # Extract namespace from previous words if present
-    _skube_extract_namespace() {
-        local i
-        for ((i = 2; i < CURRENT; i++)); do
-            if [[ "${words[i]}" == "in" && $((i + 1)) < CURRENT ]]; then
-                echo "${words[i+1]}"
-                return
-            fi
-        done
-        echo ""
-    }
-
-    local -a log_options
-    log_options=(
-        'follow:Follow logs in real-time'
-        'prefix:Show pod names in logs'
-        'max:Set max concurrent log streams'
-        'search:Search for term in logs'
-        'find:Find term in logs'
-    )
-
-    # Helper function to check if word exists in previous words
-    _contains_word() {
-        local word="$1"
-        shift
-        for w in "$@"; do
-            [[ "$w" == "$word" ]] && return 0
-        done
-        return 1
-    }
-
-    # Get previous word (word before cursor)
-    local prev="${words[CURRENT-1]}"
-
-    # First argument - show commands
-    if [[ $CURRENT -eq 2 ]]; then
-        _describe 'command' commands
-        return
-    fi
-
-    # Context-aware completion based on command and previous words
-    case "${words[2]}" in
-        get)
-            case "$prev" in
-                get)
-                    _describe 'resource' resources
-                    ;;
-                pods|pod)
-                    compadd of in app
-                    # Dynamically suggest namespaces
-                    local -a namespaces
-                    namespaces=(${(f)"$(_skube_get_namespaces)"})
-                    _values 'namespace' "${namespaces[@]}"
-                    ;;
-                deployments|deploy)
-                    compadd in
-                    local -a namespaces
-                    namespaces=(${(f)"$(_skube_get_namespaces)"})
-                    _values 'namespace' "${namespaces[@]}"
-                    ;;
-                services|svc)
-                    compadd in
-                    local -a namespaces
-                    namespaces=(${(f)"$(_skube_get_namespaces)"})
-                    _values 'namespace' "${namespaces[@]}"
-                    ;;
-                of)
-                    # After "of", suggest app names (user types them)
-                    ;;
-                app)
-                    # After "app", suggest nothing (user types app name)
-                    ;;
-                in)
-                    # Dynamically suggest namespaces
-                    local -a namespaces
-                    namespaces=(${(f)"$(_skube_get_namespaces)"})
-                    _values 'namespace' "${namespaces[@]}"
-                    ;;
-                namespaces|ns)
-                    ;;
-                *)
-                    if (_contains_word "pods" "${words[@]}" || _contains_word "pod" "${words[@]}" || \
-                        _contains_word "deployments" "${words[@]}" || _contains_word "deploy" "${words[@]}" || \
-                        _contains_word "services" "${words[@]}" || _contains_word "svc" "${words[@]}") && \
-                       _contains_word "of" "${words[@]}"; then
-                        compadd in
-                        local -a namespaces
-                        namespaces=(${(f)"$(_skube_get_namespaces)"})
-                        _values 'namespace' "${namespaces[@]}"
-                    fi
-                    ;;
-            esac
-            ;;
-
-        logs)
-            case "$prev" in
-                logs)
-                    compadd of from app pod
-                    # Suggest pods from current context
-                    local -a pods
-                    pods=(${(f)"$(_skube_get_pods)"})
-                    compadd "${pods[@]}"
-                    ;;
-                of|app)
-                    # After "of" or "app", user types app name (no autocomplete for app labels)
-                    ;;
-                from)
-                    compadd pod app
-                    ;;
-                pod)
-                    # Suggest actual pods
-                    local namespace=$(_skube_extract_namespace)
-                    local -a pods
-                    pods=(${(f)"$(_skube_get_pods \"$namespace\")"})
-                    compadd "${pods[@]}"
-                    ;;
-                *)
-                    if _contains_word "of" "${words[@]}" || _contains_word "pod" "${words[@]}" || _contains_word "app" "${words[@]}"; then
-                        if ! _contains_word "in" "${words[@]}"; then
-                            compadd in
-                        fi
-                        _describe 'log options' log_options
-                        local -a namespaces
-                        namespaces=(${(f)"$(_skube_get_namespaces)"})
-                        _values 'namespace' "${namespaces[@]}"
-                    else
-                        compadd of from app pod
-                        # Suggest pods
-                        local -a pods
-                        pods=(${(f)"$(_skube_get_pods)"})
-                        compadd "${pods[@]}"
-                    fi
-                    ;;
-            esac
-            ;;
-
-        shell)
-            case "$prev" in
-                shell)
-                    compadd into
-                    ;;
-                into)
-                    compadd pod
-                    ;;
-                pod)
-                    ;;
-                *)
-                    if _contains_word "pod" "${words[@]}"; then
-                        compadd in
-                        _values 'namespace' "${common_namespaces[@]}"
-                    fi
-                    ;;
-            esac
-            ;;
-
-        restart)
-            case "$prev" in
-                restart)
-                    compadd deployment pod
-                    # Suggest deployments and pods
-                    local -a deployments pods
-                    deployments=(${(f)"$(_skube_get_deployments)"})
-                    pods=(${(f)"$(_skube_get_pods)"})
-                    compadd "${deployments[@]}" "${pods[@]}"
-                    ;;
-                deployment)
-                    # Suggest actual deployments
-                    local namespace=$(_skube_extract_namespace)
-                    local -a deployments
-                    deployments=(${(f)"$(_skube_get_deployments \"$namespace\")"})
-                    compadd "${deployments[@]}"
-                    ;;
-                pod)
-                    # Suggest actual pods
-                    local namespace=$(_skube_extract_namespace)
-                    local -a pods
-                    pods=(${(f)"$(_skube_get_pods \"$namespace\")"})
-                    compadd "${pods[@]}"
-                    ;;
-                *)
-                    if _contains_word "deployment" "${words[@]}" || _contains_word "pod" "${words[@]}"; then
-                        compadd in
-                        local -a namespaces
-                        namespaces=(${(f)"$(_skube_get_namespaces)"})
-                        _values 'namespace' "${namespaces[@]}"
-                    fi
-                    ;;
-            esac
-            ;;
-
-        scale)
-            case "$prev" in
-                scale)
-                    compadd deployment
-                    # Suggest actual deployments
-                    local -a deployments
-                    deployments=(${(f)"$(_skube_get_deployments)"})
-                    compadd "${deployments[@]}"
-                    ;;
-                deployment)
-                    # Suggest actual deployments
-                    local namespace=$(_skube_extract_namespace)
-                    local -a deployments
-                    deployments=(${(f)"$(_skube_get_deployments \"$namespace\")"})
-                    compadd "${deployments[@]}"
-                    ;;
-                to)
-                    # User types number
-                    ;;
-                *)
-                    if _contains_word "deployment" "${words[@]}"; then
-                        if ! _contains_word "to" "${words[@]}"; then
-                            compadd to
-                        elif ! _contains_word "in" "${words[@]}"; then
-                            compadd in
-                        else
-                            local -a namespaces
-                            namespaces=(${(f)"$(_skube_get_namespaces)"})
-                            _values 'namespace' "${namespaces[@]}"
-                        fi
-                    fi
-                    ;;
-            esac
-            ;;
-
-        rollback)
-            case "$prev" in
-                rollback)
-                    compadd deployment
-                    ;;
-                deployment)
-                    ;;
-                *)
-                    if _contains_word "deployment" "${words[@]}"; then
-                        compadd in
-                        _values 'namespace' "${common_namespaces[@]}"
-                    fi
-                    ;;
-            esac
-            ;;
-
-        forward)
-            case "$prev" in
-                forward)
-                    compadd service
-                    ;;
-                service)
-                    ;;
-                port)
-                    ;;
-                *)
-                    if _contains_word "service" "${words[@]}"; then
-                        if ! _contains_word "port" "${words[@]}"; then
-                            compadd port
-                        elif ! _contains_word "in" "${words[@]}"; then
-                            compadd in
-                        else
-                            _values 'namespace' "${common_namespaces[@]}"
-                        fi
-                    fi
-                    ;;
-            esac
-            ;;
-
-        describe)
-            if [[ $CURRENT -eq 3 ]]; then
-                compadd pod deployment service namespace
-            elif [[ $CURRENT -eq 4 ]]; then
-                :
-            else
-                if ! _contains_word "in" "${words[@]}"; then
-                    compadd in
-                fi
-                _values 'namespace' "${common_namespaces[@]}"
-            fi
-            ;;
-
-        show)
-            if [[ $CURRENT -eq 3 ]]; then
-                compadd status events
-            else
-                compadd in
-                _values 'namespace' "${common_namespaces[@]}"
-            fi
-            ;;
-
-        completion)
-            if [[ $CURRENT -eq 3 ]]; then
-                compadd zsh bash
-            fi
-            ;;
-
-        *)
-            ;;
-    esac
-}
-
-# Register the completion function
-compdef _skube skube
-`
-}
-
-func getBashCompletion() string {
-	return `#!/bin/bash
-
-_skube_completions() {
-    local cur prev words cword
-    _init_completion || return
-
-    local commands="get logs shell restart scale rollback forward describe show completion update help apply delete edit config metrics copy explain"
-    local keywords="of from in into pod deployment service namespace to port follow prefix with search find get last file context"
-    local resources="namespaces pods deployments services status events nodes"
-    local namespaces="production staging qa dev prod test"
-
-    case "${prev}" in
-        skube)
-            COMPREPLY=($(compgen -W "${commands}" -- "${cur}"))
-            return 0
-            ;;
-        get|delete|edit|explain)
-            COMPREPLY=($(compgen -W "${resources}" -- "${cur}"))
-            return 0
-            ;;
-        logs|shell|restart|describe|scale|rollback|forward|apply|copy|metrics)
-            COMPREPLY=($(compgen -W "${keywords}" -- "${cur}"))
-            return 0
-            ;;
-        show)
-            COMPREPLY=($(compgen -W "status events metrics config" -- "${cur}"))
-            return 0
-            ;;
-        config)
-             COMPREPLY=($(compgen -W "use view" -- "${cur}"))
-             return 0
-             ;;
-        use)
-             COMPREPLY=($(compgen -W "context namespace" -- "${cur}"))
-             return 0
-             ;;
-        of|from|in|into)
-            COMPREPLY=($(compgen -W "pod deployment service namespace ${namespaces}" -- "${cur}"))
-            return 0
-            ;;
-        pod|deployment|service)
-            return 0
-            ;;
-        namespace)
-            COMPREPLY=($(compgen -W "${namespaces}" -- "${cur}"))
-            return 0
-            ;;
-        completion)
-            COMPREPLY=($(compgen -W "zsh bash" -- "${cur}"))
-            return 0
-            ;;
-        *)
-            COMPREPLY=($(compgen -W "${keywords} ${namespaces}" -- "${cur}"))
-            return 0
-            ;;
-    esac
-}
-
-complete -F _skube_completions skube
-`
-}
-
-func PrintHelp() {
-	help := fmt.Sprintf(`%sskube%s - Talk to Kubernetes in plain English
-
-%sUSAGE:%s
-  skube %s<command>%s %s<resource>%s %sfrom|in%s %s<name>%s %s<namespace>%s
-
-%sCOMMANDS:%s
-  %sget%s         List resources (namespaces, pods, deployments, services)
-  %slogs%s        View and search logs from pods or apps
-  %sshell%s       Open interactive shell in a pod
-  %srestart%s     Restart pods or deployments
-  %sscale%s       Scale deployment replicas
-  %srollback%s    Rollback deployment to previous version
-  %sforward%s     Port forward to a service
-  %sdescribe%s    Show detailed resource information
-  %sshow%s        Display cluster status, events, or metrics
-  %sapply%s       Apply configuration from file
-  %sdelete%s      Delete resources
-  %sedit%s        Edit resources
-  %sconfig%s      Manage configuration (context/namespace)
-  %scopy%s        Copy files to/from pods
-  %sexplain%s     Documentation for resources
-  %scompletion%s  Generate shell completion script (zsh, bash)
-  %supdate%s      Update skube to latest version
-
-%sRESOURCES:%s
-  %snamespaces%s    Kubernetes namespaces (environments)
-  %spods%s          Running pod instances
-  %sdeployments%s   Deployment configurations
-  %sservices%s      Service endpoints
-  %snodes%s         Cluster nodes
-  %sconfigmaps%s    Configuration data (cm)
-  %ssecrets%s       Sensitive data
-  %singresses%s     Ingress resources (ing)
-  %spvcs%s          PersistentVolumeClaims (pvc)
-  %sapp%s           Filter by application label
-  %spod%s           Specific pod name
-
-%sOPTIONS:%s
-  %sfollow%s        Tail logs in real-time
-  %sprefix%s        Show pod names in multi-pod logs
-  %ssearch%s        Filter logs by keyword
-  %sfind%s          Same as search
-  %sget last N%s    Show last N lines of logs
-  %s--dry-run%s     Show kubectl command without executing
-
-%sEXAMPLES:%s
-  %s# Investigation%s
-  skube get namespaces
-  skube get pods from %s<namespace>%s
-  skube get pods from app %s<app-name>%s in %s<namespace>%s
-  skube logs from app %s<app-name>%s in %s<namespace>%s follow with prefix
-  skube logs from pod %s<pod-name>%s get last 100 in %s<namespace>%s
-  skube logs from pod %s<pod-name>%s search "%serror%s" in %s<namespace>%s
-  skube show metrics pods in %s<namespace>%s
-  skube explain pod
-
-  %s# Operations%s
-  skube shell into pod %s<pod-name>%s in %s<namespace>%s
-  skube restart deployment %s<name>%s in %s<namespace>%s
-  skube scale deployment %s<name>%s to %s<N>%s in %s<namespace>%s
-  skube forward service %s<name>%s port %s<port>%s in %s<namespace>%s
-  skube apply file %s<filename>%s
-  skube delete pod %s<name>%s in %s<namespace>%s
-  skube copy file %s<src>%s to %s<dest>%s in %s<namespace>%s
-  skube use context %s<name>%s
-  skube use namespace %s<name>%s
-`,
-		config.ColorGreen, config.ColorReset,
-		config.ColorYellow, config.ColorReset,
-		config.ColorCyan, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorYellow, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorYellow, config.ColorReset,
-		config.ColorYellow, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorYellow, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorYellow, config.ColorReset,
-		config.ColorGreen, config.ColorReset,
-
-		config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorGreen, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorGreen, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-		config.ColorBlue, config.ColorReset,
-	)
-
-	fmt.Print(help)
 }

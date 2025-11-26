@@ -113,6 +113,8 @@ We welcome various types of contributions:
 
 - **Parser logic** goes in `internal/parser/`
 - **Executor logic** goes in `internal/executor/`
+- **Completion logic** goes in `internal/completion/`
+- **Help/Version logic** goes in `internal/help/`
 - **Configuration** goes in `internal/config/`
 - **Tests** should be in the same package with `_test.go` suffix
 

@@ -31,6 +31,14 @@ func ParseNaturalLanguage(args []string) *Context {
 	ctx := &Context{}
 	input := strings.Join(args, " ")
 
+	// Early namespace detection (namespace-first syntax)
+	// Supports: "skube in production logs from app myapp"
+	if len(args) > 1 && strings.ToLower(args[0]) == "in" {
+		ctx.Namespace = args[1]
+		args = args[2:] // Remove "in <namespace>" from args
+		input = strings.Join(args, " ")
+	}
+
 	for i := 0; i < len(args); i++ {
 		word := strings.ToLower(args[i])
 
@@ -70,7 +78,7 @@ var commandAliases = map[string]string{
 	"completion": "completion",
 	"update":     "update",
 	"version":    "version", "-v": "version", "--version": "version",
-	"help":       "help", "-h": "help", "--help": "help",
+	"help": "help", "-h": "help", "--help": "help",
 	"apply": "apply", "create": "apply",
 	"delete": "delete", "remove": "delete", "destroy": "delete",
 	"edit": "edit", "change": "edit", "modify": "edit",
@@ -390,6 +398,11 @@ func parsePrepositions(word string, args []string, index *int, ctx *Context) boo
 					ctx.AppName = args[i+2]
 					*index += 2
 				}
+			} else if args[i+1] == "pod" {
+				if i+2 < len(args) {
+					ctx.PodName = args[i+2]
+					*index += 2
+				}
 			} else {
 				ctx.AppName = args[i+1]
 				*index++
@@ -412,6 +425,9 @@ func parsePrepositions(word string, args []string, index *int, ctx *Context) boo
 			} else if nextWord == "namespace" && i+2 < len(args) {
 				ctx.Namespace = args[i+2]
 				*index += 2
+			} else if nextWord == "app" && i+2 < len(args) {
+				ctx.AppName = args[i+2]
+				*index += 2
 			} else if nextWord == "file" && i+2 < len(args) {
 				// for apply or copy
 				if ctx.Command == "apply" {
@@ -420,7 +436,7 @@ func parsePrepositions(word string, args []string, index *int, ctx *Context) boo
 					ctx.SourcePath = args[i+2]
 				}
 				*index += 2
-			} else if nextWord != "pod" && nextWord != "deployment" && nextWord != "service" && nextWord != "file" {
+			} else if nextWord != "pod" && nextWord != "deployment" && nextWord != "service" && nextWord != "file" && nextWord != "app" {
 				ctx.Namespace = nextWord
 				*index++
 			}

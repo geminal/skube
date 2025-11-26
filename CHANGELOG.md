@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2025-11-26
+
+### Fixed
+- **Parser**: Fixed `logs of pod` syntax parsing where "pod" was misinterpreted as an app name.
+
+### Changed
+- **Refactoring**: Split `internal/executor` into `internal/completion` and `internal/help` packages for better maintainability.
+- **Testing**: Added comprehensive unit tests for `internal/parser` covering various command syntaxes.
+
 ## [0.2.3] - 2025-11-25
 
 ### Fixed

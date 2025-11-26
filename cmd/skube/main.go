@@ -8,6 +8,7 @@ import (
 
 	"github.com/geminal/skube/internal/config"
 	"github.com/geminal/skube/internal/executor"
+	"github.com/geminal/skube/internal/help"
 	"github.com/geminal/skube/internal/parser"
 )
 
@@ -45,13 +46,13 @@ func main() {
 	}
 
 	if len(os.Args) < 2 {
-		executor.PrintHelp()
+		help.PrintHelp()
 		os.Exit(0)
 	}
 
 	// Check for version flag
 	if os.Args[1] == "--version" || os.Args[1] == "-v" || os.Args[1] == "version" {
-		executor.PrintVersion()
+		help.PrintVersion()
 		os.Exit(0)
 	}
 

@@ -48,25 +48,41 @@ skube help
 skube get namespaces
 ```
 
-## Autocomplete
+### Setup Autocomplete (Highly Recommended!)
+
+**For Zsh:**
+```bash
+# Generate completion script
+skube completion zsh > ~/.skube-completion.zsh
+
+# Add to your ~/.zshrc
+echo 'source ~/.skube-completion.zsh' >> ~/.zshrc
+
+# Reload shell
+source ~/.zshrc
+```
+
+**For Bash:**
+```bash
+# Generate completion script
+skube completion bash > ~/.skube-completion.bash
+
+# Add to your ~/.bashrc
+echo 'source ~/.skube-completion.bash' >> ~/.bashrc
+
+# Reload shell
+source ~/.bashrc
+```
+
+**Why autocomplete is essential:**
+- Tab completion shows YOUR actual pods, namespaces, and deployments
+- Faster command entry
+- Discover available commands and options
+- Results are cached for 5 seconds for better performance
+
+## How Autocomplete Works
 
 `skube` features **smart autocomplete** that queries your actual Kubernetes cluster!
-
-### Zsh
-
-Add this to your `~/.zshrc`:
-
-```bash
-source <(skube completion zsh)
-```
-
-### Bash
-
-Add this to your `~/.bashrc`:
-
-```bash
-source <(skube completion bash)
-```
 
 ### What Makes It Smart?
 
@@ -76,14 +92,15 @@ Unlike traditional autocomplete, `skube` **dynamically queries your cluster** to
 - ✅ **Real pods** when you type `skube logs <TAB>`
 - ✅ **Real deployments** when you type `skube restart deployment <TAB>`
 - ✅ **Context-aware suggestions** - if you specify a namespace, it only shows resources from that namespace
+- ✅ **Cached results** - queries are cached for 5 seconds to improve performance
 
 **Example:**
 ```bash
-$ skube logs pod <TAB>
+$ skube logs from pod <TAB>
 # Shows: nginx-7d8b49557c-abc12  redis-6b8f9c-def34  ...
 # (your actual pods!)
 
-$ skube pods in <TAB>
+$ skube get pods in <TAB>
 # Shows: default  kube-system  production  my-app-namespace  ...
 # (your actual namespaces!)
 ```
@@ -106,27 +123,41 @@ Alternatively, you can run the `go install` command manually or download the lat
 
 ## Quick Start
 
-Talk to Kubernetes naturally:
+Talk to Kubernetes naturally with two powerful syntax styles:
+
+### Namespace-First Syntax (Recommended!)
+
+Start your command with the namespace for cleaner, more readable commands:
+
+```bash
+# Set namespace context first, then run any command
+skube in production get pods
+skube in qa logs from app myapp follow
+skube in staging restart deployment api
+skube in prod shell into pod backend-123
+
+# Works with all commands!
+skube in qa get deployments
+skube in production describe pod myapp-abc123
+skube in staging scale deployment api to 5
+```
+
+**Why it's better:**
+- ✅ More natural to read: "in production, get pods"
+- ✅ Namespace is clear upfront
+- ✅ Works with any command
+- ✅ Easier to type and autocomplete
+
+### Traditional Syntax (Also Works!)
+
+Put the namespace at the end if you prefer:
 
 ```bash
 # Instead of: kubectl get namespaces
 skube get namespaces
 
-### Namespace Patterns
-- `in production`
-- `from production`
-- `in production namespace`
-- `from production namespace`
-- `-n production` (traditional flag style)
-
-### Namespace First (New!)
-You can now start your command with the namespace context:
-- `skube in qa logs from app myapp`
-- `skube in qa logs of pod mypod`
-- `skube in production get pods`
-- `skube in staging restart deployment api`
 # Instead of: kubectl get pods -n production
-skube get pods from production namespace
+skube get pods in production
 
 # Instead of: kubectl logs -f -l app=myapp --prefix=true -n prod
 skube logs of myapp in prod follow with prefix
@@ -138,6 +169,8 @@ skube logs of my-service in staging search "ERROR"
 skube logs from pod pod-abc123 get last 100 in qa
 ```
 
+**Both syntaxes work - use whichever feels more natural!**
+
 ## Conversational Commands
 
 ### Quick Investigation
@@ -148,25 +181,25 @@ Perfect for your daily workflow:
 # List environments
 skube get namespaces
 
-# Check what's running in an environment
-skube get pods from production namespace
-skube get pods from qa namespace
+# Check what's running (namespace-first syntax)
+skube in production get pods
+skube in qa get pods
 
 # Check specific app pods
-skube get pods of myapp in qa
+skube in qa get pods of myapp
 
 # Tail logs from all pods of an app (with pod names shown)
-skube logs of myapp in prod follow with prefix
+skube in prod logs of myapp follow with prefix
 
 # Tail logs from many pods (increase concurrent stream limit)
-skube logs of webapp in production follow max 30
+skube in production logs of webapp follow max 30
 
 # Search for errors in logs
-skube logs of myapp in qa search "error"
-skube logs of myapp in qa find "timeout"
+skube in qa logs of myapp search "error"
+skube in qa logs of myapp find "timeout"
 
 # Get last N lines from logs
-skube logs from pod api-abc123 get last 100 in staging
+skube in staging logs from pod api-abc123 get last 100
 ```
 
 ### Pod Operations
@@ -238,11 +271,11 @@ skube get cm in qa  # shorthand
 skube get secrets in staging
 
 # Ingress
-skube get ingresses in production
+skube get ingress in production
 skube get ing in qa  # shorthand
 
 # PersistentVolumeClaims
-skube get pvcs in production
+skube get pvc in production
 skube get pvc in staging  # shorthand
 ```
 
@@ -304,39 +337,39 @@ skube show events in qa
 # 1. Check available environments
 skube get namespaces
 
-# 2. See what's running in QA
-skube get pods from qa namespace
+# 2. See what's running in QA (namespace-first!)
+skube in qa get pods
 
 # 3. Check specific app
-skube get pods of myapp in qa
+skube in qa get pods of myapp
 
 # 4. Tail logs from all pods (with pod name prefixes)
-skube logs of myapp in qa follow with prefix
+skube in qa logs of myapp follow with prefix
 
 # 5. Search for specific errors
-skube logs of myapp in qa find "connection refused"
+skube in qa logs of myapp find "connection refused"
 
 # 6. Get last 100 lines from a specific pod
-skube logs from pod myapp-abc123 get last 100 in qa
+skube in qa logs from pod myapp-abc123 get last 100
 
 # 7. If needed, shell into a pod
-skube shell into pod myapp-abc123 in qa
+skube in qa shell into pod myapp-abc123
 ```
 
 ### Quick Operations
 
 ```bash
 # Restart a deployment
-skube restart deployment backend in prod
+skube in prod restart deployment backend
 
 # Scale up for traffic
-skube scale deployment api to 10 in production
+skube in production scale deployment api to 10
 
 # Port forward for local testing
-skube forward service my-service port 8080 in staging
+skube in staging forward service my-service port 8080
 
 # Check events for debugging
-skube show events in production
+skube in production show events
 ```
 
 ## Requirements
@@ -424,8 +457,8 @@ Press TAB to see suggestions from your **actual cluster**:
 skube <TAB><TAB>
 skube get <TAB><TAB>
 skube logs <TAB><TAB>
-skube logs pod <TAB><TAB>  # Shows YOUR actual pods!
-skube pods in <TAB><TAB>   # Shows YOUR actual namespaces!
+skube logs from pod <TAB><TAB>  # Shows YOUR actual pods!
+skube get pods in <TAB><TAB>   # Shows YOUR actual namespaces!
 ```
 
 ## Contributing

@@ -165,11 +165,14 @@ _skube() {
         done
     }
 
-    _arguments -C \
-        '1: :_describe "command" _skube_cmds' \
-        '*:: :->args'
+    _arguments \
+        '1:command:->command' \
+        '*::arg:->args'
 
     case $state in
+        command)
+            _describe 'command' _skube_cmds
+            ;;
         args)
             case $words[1] in
                 in)

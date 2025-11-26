@@ -2,6 +2,7 @@ package help
 
 import (
 	"fmt"
+	"runtime/debug"
 
 	"github.com/geminal/skube/internal/config"
 )
@@ -10,7 +11,16 @@ import (
 var Version = "dev"
 
 func PrintVersion() {
-	fmt.Printf("skube version %s\n", Version)
+	version := Version
+
+	// Try to get version from build info (works with go install)
+	if info, ok := debug.ReadBuildInfo(); ok && version == "dev" {
+		if info.Main.Version != "" && info.Main.Version != "(devel)" {
+			version = info.Main.Version
+		}
+	}
+
+	fmt.Printf("skube version %s\n", version)
 }
 
 var commandHelp = map[string]string{

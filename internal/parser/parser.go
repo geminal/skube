@@ -5,6 +5,34 @@ import (
 	"strings"
 )
 
+const (
+	// Prepositions
+	PrepIn   = "in"
+	PrepFrom = "from"
+	PrepOf   = "of"
+	PrepTo   = "to"
+	PrepInto = "into"
+
+	// Keywords/Resources
+	KwApp        = "app"
+	KwPod        = "pod"
+	KwDeployment = "deployment"
+	KwService    = "service"
+	KwNamespace  = "namespace"
+	KwFile       = "file"
+
+	// Commands
+	CmdLogs     = "logs"
+	CmdShell    = "shell"
+	CmdRestart  = "restart"
+	CmdScale    = "scale"
+	CmdRollback = "rollback"
+	CmdForward  = "forward"
+	CmdCopy     = "copy"
+	CmdApply    = "apply"
+	CmdGet      = "get"
+)
+
 type Context struct {
 	Command        string
 	Namespace      string
@@ -33,7 +61,7 @@ func ParseNaturalLanguage(args []string) *Context {
 
 	// Early namespace detection (namespace-first syntax)
 	// Supports: "skube in production logs from app myapp"
-	if len(args) > 1 && strings.ToLower(args[0]) == "in" {
+	if len(args) > 1 && strings.ToLower(args[0]) == PrepIn {
 		ctx.Namespace = args[1]
 		args = args[2:] // Remove "in <namespace>" from args
 		input = strings.Join(args, " ")
@@ -136,7 +164,7 @@ func parseCommand(word string, args []string, index *int, ctx *Context) bool {
 	i := *index
 
 	// Special case for "get"
-	if word == "get" {
+	if word == CmdGet {
 		if i+1 < len(args) {
 			nextWord := args[i+1]
 			if cmd, ok := getCommandMap[nextWord]; ok {
@@ -200,8 +228,8 @@ func parseCommand(word string, args []string, index *int, ctx *Context) bool {
 			if i+1 < len(args) {
 				ctx.ResourceType = args[i+1]
 			}
-		case "apply":
-			if i+1 < len(args) && (args[i+1] == "file" || args[i+1] == "-f") {
+		case CmdApply:
+			if i+1 < len(args) && (args[i+1] == KwFile || args[i+1] == "-f") {
 				if i+2 < len(args) {
 					ctx.FilePath = args[i+2]
 					*index += 2
@@ -224,12 +252,17 @@ func parseCommand(word string, args []string, index *int, ctx *Context) bool {
 					}
 				}
 			}
-		case "copy":
-			if i+1 < len(args) && args[i+1] == "file" {
+		case CmdCopy:
+			if i+1 < len(args) && args[i+1] == KwFile {
 				*index++
 			}
 		case "explain":
 			if word == "what" && i+1 < len(args) && args[i+1] == "is" {
+				*index++
+			}
+		case "help":
+			if i+1 < len(args) {
+				ctx.ResourceType = args[i+1]
 				*index++
 			}
 		}
@@ -246,7 +279,7 @@ func parseResource(word string, args []string, index *int, ctx *Context) bool {
 	if resType, ok := resourceAliases[word]; ok {
 		// If command is empty OR command is generic "get", upgrade to specific command
 		if cmd, isCmd := getCommandMap[word]; isCmd {
-			if ctx.Command == "" || ctx.Command == "get" {
+			if ctx.Command == "" || ctx.Command == CmdGet {
 				ctx.Command = cmd
 				return true
 			}
@@ -259,7 +292,7 @@ func parseResource(word string, args []string, index *int, ctx *Context) bool {
 
 		// Type Correction: If we see "deployment" but have a PodName (likely from parseDefault),
 		// and no DeploymentName, assume the PodName was actually the DeploymentName.
-		if resType == "deployment" && ctx.PodName != "" && ctx.DeploymentName == "" {
+		if resType == KwDeployment && ctx.PodName != "" && ctx.DeploymentName == "" {
 			ctx.DeploymentName = ctx.PodName
 			ctx.PodName = ""
 			// Don't return true yet, we might still want to consume next word if it's a name?
@@ -271,26 +304,26 @@ func parseResource(word string, args []string, index *int, ctx *Context) bool {
 		}
 
 		// Context setting (e.g. "deployment api")
-		if resType == "deployment" && i+1 < len(args) && ctx.DeploymentName == "" {
+		if resType == KwDeployment && i+1 < len(args) && ctx.DeploymentName == "" {
 			// Check if next word is a stop word or preposition, if so, don't consume it
 			nextWord := strings.ToLower(args[i+1])
-			if !stopWords[nextWord] && nextWord != "in" && nextWord != "from" && nextWord != "to" {
+			if !stopWords[nextWord] && nextWord != PrepIn && nextWord != PrepFrom && nextWord != PrepTo {
 				ctx.DeploymentName = args[i+1]
 				*index++
 			}
 			return true
 		}
-		if resType == "service" && i+1 < len(args) && ctx.ServiceName == "" {
+		if resType == KwService && i+1 < len(args) && ctx.ServiceName == "" {
 			nextWord := strings.ToLower(args[i+1])
-			if !stopWords[nextWord] && nextWord != "in" && nextWord != "from" && nextWord != "to" {
+			if !stopWords[nextWord] && nextWord != PrepIn && nextWord != PrepFrom && nextWord != PrepTo {
 				ctx.ServiceName = args[i+1]
 				*index++
 			}
 			return true
 		}
-		if resType == "namespace" && i+1 < len(args) && ctx.Namespace == "" {
+		if resType == KwNamespace && i+1 < len(args) && ctx.Namespace == "" {
 			nextWord := strings.ToLower(args[i+1])
-			if !stopWords[nextWord] && nextWord != "in" && nextWord != "from" && nextWord != "to" {
+			if !stopWords[nextWord] && nextWord != PrepIn && nextWord != PrepFrom && nextWord != PrepTo {
 				ctx.Namespace = args[i+1]
 				*index++
 			}
@@ -300,7 +333,7 @@ func parseResource(word string, args []string, index *int, ctx *Context) bool {
 		return true
 	}
 
-	if word == "app" {
+	if word == KwApp {
 		if i+1 < len(args) && ctx.AppName == "" {
 			ctx.AppName = args[i+1]
 			*index++
@@ -322,9 +355,9 @@ func parseFlags(word string, args []string, index *int, ctx *Context) bool {
 		ctx.DryRun = true
 		return true
 
-	case "to":
+	case PrepTo:
 		if i+1 < len(args) {
-			if ctx.Command == "copy" {
+			if ctx.Command == CmdCopy {
 				ctx.DestPath = args[i+1]
 				*index++
 			} else {
@@ -390,15 +423,15 @@ func parseFlags(word string, args []string, index *int, ctx *Context) bool {
 func parsePrepositions(word string, args []string, index *int, ctx *Context) bool {
 	i := *index
 	switch word {
-	case "of":
+	case PrepOf:
 		// "of" keyword implies app context: "logs of myapp in qa"
 		if i+1 < len(args) {
-			if args[i+1] == "app" {
+			if args[i+1] == KwApp {
 				if i+2 < len(args) {
 					ctx.AppName = args[i+2]
 					*index += 2
 				}
-			} else if args[i+1] == "pod" {
+			} else if args[i+1] == KwPod {
 				if i+2 < len(args) {
 					ctx.PodName = args[i+2]
 					*index += 2
@@ -410,33 +443,33 @@ func parsePrepositions(word string, args []string, index *int, ctx *Context) boo
 		}
 		return true
 
-	case "from", "in", "into":
+	case PrepFrom, PrepIn, PrepInto:
 		if i+1 < len(args) {
 			nextWord := args[i+1]
-			if nextWord == "pod" && i+2 < len(args) {
+			if nextWord == KwPod && i+2 < len(args) {
 				ctx.PodName = args[i+2]
 				*index += 2
-			} else if nextWord == "deployment" && i+2 < len(args) {
+			} else if nextWord == KwDeployment && i+2 < len(args) {
 				ctx.DeploymentName = args[i+2]
 				*index += 2
-			} else if nextWord == "service" && i+2 < len(args) {
+			} else if nextWord == KwService && i+2 < len(args) {
 				ctx.ServiceName = args[i+2]
 				*index += 2
-			} else if nextWord == "namespace" && i+2 < len(args) {
+			} else if nextWord == KwNamespace && i+2 < len(args) {
 				ctx.Namespace = args[i+2]
 				*index += 2
-			} else if nextWord == "app" && i+2 < len(args) {
+			} else if nextWord == KwApp && i+2 < len(args) {
 				ctx.AppName = args[i+2]
 				*index += 2
-			} else if nextWord == "file" && i+2 < len(args) {
+			} else if nextWord == KwFile && i+2 < len(args) {
 				// for apply or copy
-				if ctx.Command == "apply" {
+				if ctx.Command == CmdApply {
 					ctx.FilePath = args[i+2]
-				} else if ctx.Command == "copy" {
+				} else if ctx.Command == CmdCopy {
 					ctx.SourcePath = args[i+2]
 				}
 				*index += 2
-			} else if nextWord != "pod" && nextWord != "deployment" && nextWord != "service" && nextWord != "file" && nextWord != "app" {
+			} else if nextWord != KwPod && nextWord != KwDeployment && nextWord != KwService && nextWord != KwFile && nextWord != KwApp {
 				ctx.Namespace = nextWord
 				*index++
 			}
@@ -447,16 +480,28 @@ func parsePrepositions(word string, args []string, index *int, ctx *Context) boo
 }
 
 func parseDefault(word string, input string, ctx *Context) {
+	if inferNamespaceFromContext(word, ctx) {
+		return
+	}
+
+	if inferResourceName(word, ctx) {
+		return
+	}
+
+	inferPortOrReplicas(word, input, ctx)
+}
+
+func inferNamespaceFromContext(word string, ctx *Context) bool {
 	// If we have a command that lists resources, and namespace is empty, assume this word is the namespace
 	// e.g. "skube pods qa" -> Command="pods", Namespace="qa"
 	if ctx.Namespace == "" && (ctx.Command == "pods" || ctx.Command == "deployments" ||
 		ctx.Command == "services" || ctx.Command == "nodes" || ctx.Command == "configmaps" ||
 		ctx.Command == "secrets" || ctx.Command == "ingresses" || ctx.Command == "pvcs" ||
 		ctx.Command == "events" || ctx.Command == "status" || ctx.Command == "all") {
-		// Ensure it's not a flag or modifier we missed (though parseFlags should have caught it)
+		// Ensure it's not a flag or modifier we missed
 		if !strings.HasPrefix(word, "-") {
 			ctx.Namespace = word
-			return
+			return true
 		}
 	}
 
@@ -466,40 +511,53 @@ func parseDefault(word string, input string, ctx *Context) {
 	if ctx.Namespace == "" && (ctx.PodName != "" || ctx.AppName != "" || ctx.DeploymentName != "" || ctx.ServiceName != "" || ctx.ResourceName != "") {
 		if !strings.HasPrefix(word, "-") {
 			ctx.Namespace = word
-			return
+			return true
 		}
 	}
+	return false
+}
 
+func inferResourceName(word string, ctx *Context) bool {
 	// Default resource name inference
 	if ctx.PodName == "" && ctx.DeploymentName == "" && ctx.ServiceName == "" && ctx.AppName == "" && ctx.ResourceName == "" {
-		if ctx.Command == "logs" || ctx.Command == "shell" || ctx.Command == "restart" {
+		if ctx.Command == CmdLogs || ctx.Command == CmdShell || ctx.Command == CmdRestart {
 			ctx.PodName = word
-		} else if ctx.Command == "scale" || ctx.Command == "rollback" {
+			return true
+		} else if ctx.Command == CmdScale || ctx.Command == CmdRollback {
 			ctx.DeploymentName = word
-		} else if ctx.Command == "forward" {
+			return true
+		} else if ctx.Command == CmdForward {
 			ctx.ServiceName = word
+			return true
 		} else if isResourceCommand(ctx.Command) {
 			if ctx.ResourceType == "" {
 				ctx.ResourceType = word
+				return true
 			} else if ctx.ResourceName == "" {
 				ctx.ResourceName = word
+				return true
 			}
-		} else if ctx.Command == "copy" {
+		} else if ctx.Command == CmdCopy {
 			if ctx.SourcePath == "" {
 				ctx.SourcePath = word
+				return true
 			} else if ctx.DestPath == "" {
 				ctx.DestPath = word
+				return true
 			}
 		}
 	}
+	return false
+}
 
-	if strings.Contains(word, ":") && ctx.Port == "" && ctx.Command != "copy" {
+func inferPortOrReplicas(word string, input string, ctx *Context) {
+	if strings.Contains(word, ":") && ctx.Port == "" && ctx.Command != CmdCopy {
 		ctx.Port = word
 	}
 	if _, err := strconv.Atoi(word); err == nil && ctx.Port == "" && ctx.Replicas == "" {
-		if strings.Contains(input, "scale") {
+		if strings.Contains(input, CmdScale) {
 			ctx.Replicas = word
-		} else if strings.Contains(input, "forward") || strings.Contains(input, "port") {
+		} else if strings.Contains(input, CmdForward) || strings.Contains(input, "port") {
 			ctx.Port = word
 		}
 	}

@@ -6,11 +6,80 @@ import (
 	"github.com/geminal/skube/internal/config"
 )
 
+// Version is set at build time using -ldflags
+var Version = "dev"
+
 func PrintVersion() {
-	fmt.Printf("skube version %s\n", "v1.0.0")
+	fmt.Printf("skube version %s\n", Version)
 }
 
-func PrintHelp() {
+var commandHelp = map[string]string{
+	"get": `Usage: skube get <resource> [in <namespace>]
+
+List resources in the cluster.
+
+Examples:
+  skube get pods
+  skube get services in production
+  skube get deployments`,
+
+	"logs": `Usage: skube logs from <pod|app> <name> [in <namespace>] [follow] [search "term"]
+
+View logs from a pod or application.
+
+Options:
+  follow        Stream logs in real-time
+  prefix        Add pod name prefix to lines
+  search "term" Filter logs by keyword
+  get last N    Show only the last N lines
+
+Examples:
+  skube logs from app myapp
+  skube logs from pod backend-123 in prod follow`,
+
+	"shell": `Usage: skube shell into pod <name> [in <namespace>]
+
+Open an interactive shell (/bin/sh) in a running pod.
+
+Examples:
+  skube shell into pod backend-123
+  skube in production shell into pod database-0`,
+
+	"restart": `Usage: skube restart <deployment|pod> <name> [in <namespace>]
+
+Restart a resource. For deployments, it performs a rollout restart. For pods, it deletes the pod.
+
+Examples:
+  skube restart deployment backend
+  skube restart pod worker-123`,
+
+	"scale": `Usage: skube scale deployment <name> to <N> [in <namespace>]
+
+Scale a deployment to a specific number of replicas.
+
+Examples:
+  skube scale deployment backend to 5
+  skube scale deployment worker to 0 in staging`,
+
+	"forward": `Usage: skube forward service <name> port <port> [in <namespace>]
+
+Forward a local port to a service in the cluster.
+
+Examples:
+  skube forward service web port 8080
+  skube forward service db port 5432:5432 in prod`,
+}
+
+func PrintHelp(args ...string) {
+	if len(args) > 0 && args[0] != "" {
+		cmd := args[0]
+		if helpText, ok := commandHelp[cmd]; ok {
+			fmt.Println(helpText)
+			return
+		}
+		fmt.Printf("No specific help for command: %s\n\n", cmd)
+	}
+
 	help := fmt.Sprintf(`%sskube%s - Talk to Kubernetes in plain English
 
 %sUSAGE:%s
@@ -35,6 +104,7 @@ func PrintHelp() {
   %sexplain%s     Documentation for resources
   %scompletion%s  Generate shell completion script (zsh, bash)
   %supdate%s      Update skube to latest version
+  %shelp%s        Show help message (try: skube help logs)
 
 %sRESOURCES:%s
   %snamespaces%s    Kubernetes namespaces (environments)
@@ -99,8 +169,9 @@ func PrintHelp() {
 		config.ColorCyan, config.ColorReset,
 		config.ColorCyan, config.ColorReset,
 		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
-		config.ColorCyan, config.ColorReset,
+		config.ColorCyan, config.ColorReset, // completion
+		config.ColorCyan, config.ColorReset, // update
+		config.ColorCyan, config.ColorReset, // help
 		config.ColorYellow, config.ColorReset,
 		config.ColorCyan, config.ColorReset,
 		config.ColorCyan, config.ColorReset,

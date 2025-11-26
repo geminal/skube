@@ -13,6 +13,9 @@ import (
 	"github.com/geminal/skube/internal/parser"
 )
 
+// execCommand is a variable to allow mocking in tests
+var execCommand = exec.Command
+
 func ExecuteCommand(ctx *parser.Context) error {
 	// Sanitize inputs
 	ctx.SearchTerm = sanitizeInput(ctx.SearchTerm)
@@ -86,7 +89,7 @@ func ExecuteCommand(ctx *parser.Context) error {
 		help.PrintVersion()
 		return nil
 	case "help":
-		help.PrintHelp()
+		help.PrintHelp(ctx.ResourceType)
 		return nil
 	default:
 		return fmt.Errorf("unknown command: %s\nRun 'skube help' for usage", ctx.Command)
@@ -126,7 +129,15 @@ func handleLogs(ctx *parser.Context) error {
 		return runKubectlPiped(kubectlArgs, []string{"--color=always", ctx.SearchTerm}, ctx.DryRun)
 	}
 
-	return runKubectl(kubectlArgs, ctx.DryRun)
+	err := runKubectl(kubectlArgs, ctx.DryRun)
+	if err != nil && !ctx.DryRun {
+		// Check for common errors
+		if strings.Contains(err.Error(), "ContainerCreating") || strings.Contains(err.Error(), "CrashLoopBackOff") {
+			fmt.Printf("%s💡 Tip: The pod seems to be having trouble starting. Try describing it:%s\n", config.ColorYellow, config.ColorReset)
+			fmt.Printf("   skube describe pod %s\n", ctx.PodName)
+		}
+	}
+	return err
 }
 
 func handleShell(ctx *parser.Context) error {
@@ -141,7 +152,14 @@ func handleShell(ctx *parser.Context) error {
 	kubectlArgs = append(kubectlArgs, "--", "sh")
 
 	fmt.Printf("%s🐚 Opening shell in pod: %s%s\n", config.ColorCyan, ctx.PodName, config.ColorReset)
-	return runKubectl(kubectlArgs, ctx.DryRun)
+	err := runKubectl(kubectlArgs, ctx.DryRun)
+	if err != nil && !ctx.DryRun {
+		if strings.Contains(err.Error(), "not found") {
+			fmt.Printf("%s💡 Tip: Double check the pod name. List pods with:%s\n", config.ColorYellow, config.ColorReset)
+			fmt.Printf("   skube get pods\n")
+		}
+	}
+	return err
 }
 
 func handleRestart(ctx *parser.Context) error {
@@ -228,7 +246,12 @@ func handlePortForward(ctx *parser.Context) error {
 	}
 
 	fmt.Printf("%s🔌 Port forwarding service %s on %s%s\n", config.ColorCyan, ctx.ServiceName, port, config.ColorReset)
-	return runKubectl(kubectlArgs, ctx.DryRun)
+	err := runKubectl(kubectlArgs, ctx.DryRun)
+	if err != nil && !ctx.DryRun {
+		fmt.Printf("%s💡 Tip: Check if the service exists and exposes port %s:%s\n", config.ColorYellow, port, config.ColorReset)
+		fmt.Printf("   skube get services\n")
+	}
+	return err
 }
 
 func handleDescribe(ctx *parser.Context) error {
@@ -454,7 +477,7 @@ func handleUpdate() error {
 
 	fmt.Printf("%sRunning: go install github.com/geminal/skube/cmd/skube@latest%s\n", config.ColorYellow, config.ColorReset)
 
-	cmd := exec.Command("go", "install", "github.com/geminal/skube/cmd/skube@latest")
+	cmd := execCommand("go", "install", "github.com/geminal/skube/cmd/skube@latest")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -488,7 +511,7 @@ func runKubectl(args []string, dryRun bool) error {
 
 	// For interactive commands or commands that might trigger OIDC auth, use direct IO
 	if isInteractive {
-		cmd := exec.Command("kubectl", args...)
+		cmd := execCommand("kubectl", args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Stdin = os.Stdin
@@ -497,7 +520,7 @@ func runKubectl(args []string, dryRun bool) error {
 
 	// For non-interactive commands, try with a timeout first to detect hanging
 	// If it might need auth, we'll switch to interactive mode
-	cmd := exec.Command("kubectl", args...)
+	cmd := execCommand("kubectl", args...)
 	cmd.Stdin = os.Stdin // Always pass stdin for potential OIDC auth
 
 	// Use pipes for stdout/stderr to capture and display
@@ -550,61 +573,14 @@ func runKubectl(args []string, dryRun bool) error {
 	return nil
 }
 
-// isAuthenticationError checks if the error is related to authentication/authorization
-func isAuthenticationError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	errMsg := err.Error()
-	return containsAuthError(errMsg)
-}
-
-// containsAuthError checks if a string contains authentication error indicators
-func containsAuthError(msg string) bool {
-	authErrors := []string{
-		"Unauthorized",
-		"unauthorized",
-		"authentication",
-		"oidc",
-		"token",
-		"expired",
-		"invalid",
-		"forbidden",
-		"Unable to connect to the server",
-		"error: You must be logged in",
-		"OIDC",
-		"credentials",
-		"401",
-	}
-
-	for _, authErr := range authErrors {
-		if strings.Contains(msg, authErr) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// runKubectlWithAuth runs kubectl with direct IO to allow OIDC/Keycloak auth flow
-func runKubectlWithAuth(args []string) error {
-	cmd := exec.Command("kubectl", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
-	return cmd.Run()
-}
-
 func runKubectlPiped(kubectlArgs []string, grepArgs []string, dryRun bool) error {
 	if dryRun {
 		fmt.Printf("%s📋 DRY RUN: Would execute:%s\n", config.ColorYellow, config.ColorReset)
 		fmt.Printf("kubectl %s | grep %s\n", strings.Join(kubectlArgs, " "), strings.Join(grepArgs, " "))
 		return nil
 	}
-	kubectlCmd := exec.Command("kubectl", kubectlArgs...)
-	grepCmd := exec.Command("grep", grepArgs...)
+	kubectlCmd := execCommand("kubectl", kubectlArgs...)
+	grepCmd := execCommand("grep", grepArgs...)
 
 	pipe, err := kubectlCmd.StdoutPipe()
 	if err != nil {

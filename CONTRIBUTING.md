@@ -51,7 +51,8 @@ By participating in this project, you agree to maintain a respectful and inclusi
 go mod download
 
 # Build the binary
-go build -o skube cmd/skube/main.go
+# Build the binary
+go build -ldflags "-X github.com/geminal/skube/internal/help.Version=v1.0.0" -o skube cmd/skube/main.go
 
 # Run tests
 go test ./...

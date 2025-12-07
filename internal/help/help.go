@@ -109,11 +109,15 @@ func PrintHelp(args ...string) {
   %sapply%s       Apply configuration from file
   %sdelete%s      Delete resources
   %sedit%s        Edit resources
-  %sconfig%s      Manage configuration (context/namespace)
+  %sconfig%s      Manage configuration (contexts/namespaces)
   %scopy%s        Copy files to/from pods
   %sexplain%s     Documentation for resources
   %scompletion%s  Generate shell completion script (zsh, bash)
   %supdate%s      Update skube to latest version
+  %ssetup-ai%s    Configure AI features (requires Docker or Ollama)
+  %sswitch-ai%s   Switch between AI providers (Ollama/OpenAI)
+  %sconfig-ai%s   Import AI config from JSON file
+  %smodel%s       Show current AI model and provider configuration
   %shelp%s        Show help message (try: skube help logs)
 
 %sRESOURCES:%s
@@ -136,6 +140,7 @@ func PrintHelp(args ...string) {
   %sfind%s          Same as search
   %sget last N%s    Show last N lines of logs
   %s--dry-run%s     Show kubectl command without executing
+  %s--ai%s          Use AI to parse natural language (run 'setup-ai' first)
 
 %sEXAMPLES:%s
   %s# Investigation%s
@@ -156,7 +161,12 @@ func PrintHelp(args ...string) {
   skube apply file %s<filename>%s
   skube delete pod %s<name>%s in %s<namespace>%s
   skube copy file %s<src>%s to %s<dest>%s in %s<namespace>%s
+
+  %s# Context Management%s
+  skube show context
+  skube list contexts
   skube use context %s<name>%s
+  skube switch context %s<name>%s
   skube use namespace %s<name>%s
 `,
 		config.ColorGreen, config.ColorReset,
@@ -181,6 +191,10 @@ func PrintHelp(args ...string) {
 		config.ColorCyan, config.ColorReset,
 		config.ColorCyan, config.ColorReset, // completion
 		config.ColorCyan, config.ColorReset, // update
+		config.ColorCyan, config.ColorReset, // setup-ai
+		config.ColorCyan, config.ColorReset, // switch-ai
+		config.ColorCyan, config.ColorReset, // config-ai
+		config.ColorCyan, config.ColorReset, // model
 		config.ColorCyan, config.ColorReset, // help
 		config.ColorYellow, config.ColorReset,
 		config.ColorCyan, config.ColorReset,
@@ -201,6 +215,7 @@ func PrintHelp(args ...string) {
 		config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset,
 		config.ColorBlue, config.ColorReset,
+		config.ColorBlue, config.ColorReset, // --ai
 
 		config.ColorYellow, config.ColorReset, // EXAMPLES header
 		config.ColorYellow, config.ColorReset, // Investigation header
@@ -222,8 +237,13 @@ func PrintHelp(args ...string) {
 		config.ColorBlue, config.ColorReset, // apply
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, // delete
 		config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, config.ColorBlue, config.ColorReset, // copy
-		config.ColorBlue, config.ColorReset, // use context
-		config.ColorBlue, config.ColorReset, // use namespace
+
+		config.ColorYellow, config.ColorReset, // Context Management header
+		// show context (no params)
+		// list contexts (no params)
+		config.ColorBlue, config.ColorReset, // use context <name>
+		config.ColorBlue, config.ColorReset, // switch context <name>
+		config.ColorBlue, config.ColorReset, // use namespace <name>
 	)
 
 	fmt.Print(help)

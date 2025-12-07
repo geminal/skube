@@ -237,6 +237,17 @@ _skube() {
                                 compadd "${pods[@]}"
                                 ;;
                         esac
+                    elif [[ $CURRENT -gt 6 ]]; then
+                        # After app/pod name, suggest additional options
+                        local -a log_options
+                        log_options=(
+                            'follow:Follow log output (-f)'
+                            '-f:Follow log output'
+                            'prefix:Show pod name prefix'
+                            'search:Search/filter logs'
+                            'tail:Show last N lines'
+                        )
+                        _describe "log options" log_options
                     fi
                     ;;
                 restart)

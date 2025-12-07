@@ -3,7 +3,21 @@ package parser
 import (
 	"strconv"
 	"strings"
+	"sync"
 )
+
+var (
+	resolver     *ResourceResolver
+	resolverOnce sync.Once
+)
+
+// getResolver returns a singleton ResourceResolver instance
+func getResolver() *ResourceResolver {
+	resolverOnce.Do(func() {
+		resolver = NewResourceResolver()
+	})
+	return resolver
+}
 
 const (
 	// Prepositions
@@ -57,6 +71,12 @@ type Context struct {
 
 func ParseNaturalLanguage(args []string) *Context {
 	ctx := &Context{}
+
+	// Handle single string input (e.g. from --ai flag fallback)
+	if len(args) == 1 && strings.Contains(args[0], " ") {
+		args = strings.Fields(args[0])
+	}
+
 	input := strings.Join(args, " ")
 
 	// Early namespace detection (namespace-first syntax)
@@ -99,7 +119,45 @@ func ParseNaturalLanguage(args []string) *Context {
 		parseDefault(word, input, ctx)
 	}
 
+	// Post-processing: resolve resource names using cluster patterns
+	resolveResourceNames(ctx)
+
 	return ctx
+}
+
+// resolveResourceNames uses the resource resolver to improve name matching
+func resolveResourceNames(ctx *Context) {
+	resolver := getResolver()
+
+	// Only resolve if we have learned patterns
+	if !resolver.HasPatterns() {
+		return
+	}
+
+	// Resolve namespace with fuzzy matching
+	if ctx.Namespace != "" {
+		ctx.Namespace = resolver.ResolveNamespace(ctx.Namespace)
+	}
+
+	// Resolve app name with fuzzy matching and cluster awareness
+	if ctx.AppName != "" {
+		ctx.AppName = resolver.ResolveAppName(ctx.AppName, ctx.Namespace)
+	}
+
+	// Resolve deployment name
+	if ctx.DeploymentName != "" {
+		ctx.DeploymentName = resolver.ResolveAppName(ctx.DeploymentName, ctx.Namespace)
+	}
+
+	// Resolve service name
+	if ctx.ServiceName != "" {
+		ctx.ServiceName = resolver.ResolveServiceName(ctx.ServiceName, ctx.Namespace)
+	}
+
+	// Resolve pod name
+	if ctx.PodName != "" {
+		ctx.PodName = resolver.ResolvePodName(ctx.PodName, ctx.Namespace)
+	}
 }
 
 var commandAliases = map[string]string{
@@ -108,21 +166,21 @@ var commandAliases = map[string]string{
 	"version":    "version", "-v": "version", "--version": "version",
 	"help": "help", "-h": "help", "--help": "help",
 	"apply": "apply", "create": "apply",
-	"delete": "delete", "remove": "delete", "destroy": "delete",
+	"delete": "delete", "remove": "delete", "destroy": "delete", "rm": "delete", "del": "delete",
 	"edit": "edit", "change": "edit", "modify": "edit",
 	"use": "config", "switch": "config", "config": "config",
 	"copy": "copy", "cp": "copy",
-	"explain": "explain", "what": "explain",
-	"logs": "logs", "log": "logs", "monitor": "logs", "tail": "logs",
-	"shell": "shell", "exec": "shell", "ssh": "shell", "connect": "shell",
-	"restart": "restart", "reboot": "restart", "bounce": "restart",
-	"scale": "scale", "resize": "scale",
-	"rollback": "rollback", "undo": "rollback", "revert": "rollback",
-	"forward": "forward", "port-forward": "forward", "tunnel": "forward",
-	"describe": "describe", "inspect": "describe", "details": "describe",
-	"status": "status", "health": "status",
-	"events": "events", "history": "events",
-	"get": "get", "list": "get", "show": "get", "fetch": "get", "give": "get", "check": "get",
+	"explain":   "explain", "what": "explain",
+	"logs":      "logs", "log": "logs", "monitor": "logs", "tail": "logs", "watch": "logs", "view": "logs",
+	"shell":     "shell", "exec": "shell", "ssh": "shell", "connect": "shell", "bash": "shell", "sh": "shell", "open": "shell", "attach": "shell",
+	"restart":   "restart", "reboot": "restart", "bounce": "restart", "redeploy": "restart", "reload": "restart", "rollout": "restart",
+	"scale":     "scale", "resize": "scale", "replicas": "scale",
+	"rollback":  "rollback", "undo": "rollback", "revert": "rollback", "rollout-undo": "rollback",
+	"forward":   "forward", "port-forward": "forward", "tunnel": "forward", "pf": "forward",
+	"describe":  "describe", "inspect": "describe", "details": "describe", "info": "describe",
+	"status":    "status", "health": "status", "state": "status",
+	"events":    "events", "history": "events", "event": "events",
+	"get":       "get", "list": "get", "show": "get", "fetch": "get", "give": "get", "check": "get", "display": "get", "ls": "get",
 }
 
 var stopWords = map[string]bool{
@@ -206,6 +264,14 @@ func parseCommand(word string, args []string, index *int, ctx *Context) bool {
 				ctx.Command = "config"
 				ctx.ResourceType = "view"
 				return true
+			} else if sub == "context" {
+				ctx.Command = "config"
+				ctx.ResourceType = "show-context"
+				return true
+			} else if sub == "contexts" {
+				ctx.Command = "config"
+				ctx.ResourceType = "list-contexts"
+				return true
 			} else if sub == "metrics" {
 				ctx.Command = "metrics"
 				if i+2 < len(args) {
@@ -216,6 +282,14 @@ func parseCommand(word string, args []string, index *int, ctx *Context) bool {
 			}
 		}
 		// If not a special show command, fall through to alias lookup (show -> get)
+	}
+
+	// Special case for "list contexts"
+	if word == "list" && i+1 < len(args) && (args[i+1] == "contexts" || args[i+1] == "context") {
+		ctx.Command = "config"
+		ctx.ResourceType = "list-contexts"
+		*index++
+		return true
 	}
 
 	// Lookup in alias map
@@ -428,17 +502,22 @@ func parsePrepositions(word string, args []string, index *int, ctx *Context) boo
 		if i+1 < len(args) {
 			if args[i+1] == KwApp {
 				if i+2 < len(args) {
-					ctx.AppName = args[i+2]
-					*index += 2
+					// Collect multi-word app name
+					appName := collectResourceName(args, i+2)
+					ctx.AppName = appName.name
+					*index += 1 + appName.wordCount
 				}
 			} else if args[i+1] == KwPod {
 				if i+2 < len(args) {
-					ctx.PodName = args[i+2]
-					*index += 2
+					podName := collectResourceName(args, i+2)
+					ctx.PodName = podName.name
+					*index += 1 + podName.wordCount
 				}
 			} else {
-				ctx.AppName = args[i+1]
-				*index++
+				// Collect multi-word resource name
+				resourceName := collectResourceName(args, i+1)
+				ctx.AppName = resourceName.name
+				*index += resourceName.wordCount
 			}
 		}
 		return true
@@ -447,20 +526,25 @@ func parsePrepositions(word string, args []string, index *int, ctx *Context) boo
 		if i+1 < len(args) {
 			nextWord := args[i+1]
 			if nextWord == KwPod && i+2 < len(args) {
-				ctx.PodName = args[i+2]
-				*index += 2
+				podName := collectResourceName(args, i+2)
+				ctx.PodName = podName.name
+				*index += 1 + podName.wordCount
 			} else if nextWord == KwDeployment && i+2 < len(args) {
-				ctx.DeploymentName = args[i+2]
-				*index += 2
+				depName := collectResourceName(args, i+2)
+				ctx.DeploymentName = depName.name
+				*index += 1 + depName.wordCount
 			} else if nextWord == KwService && i+2 < len(args) {
-				ctx.ServiceName = args[i+2]
-				*index += 2
+				svcName := collectResourceName(args, i+2)
+				ctx.ServiceName = svcName.name
+				*index += 1 + svcName.wordCount
 			} else if nextWord == KwNamespace && i+2 < len(args) {
-				ctx.Namespace = args[i+2]
-				*index += 2
+				nsName := collectResourceName(args, i+2)
+				ctx.Namespace = nsName.name
+				*index += 1 + nsName.wordCount
 			} else if nextWord == KwApp && i+2 < len(args) {
-				ctx.AppName = args[i+2]
-				*index += 2
+				appName := collectResourceName(args, i+2)
+				ctx.AppName = appName.name
+				*index += 1 + appName.wordCount
 			} else if nextWord == KwFile && i+2 < len(args) {
 				// for apply or copy
 				if ctx.Command == CmdApply {
@@ -470,13 +554,57 @@ func parsePrepositions(word string, args []string, index *int, ctx *Context) boo
 				}
 				*index += 2
 			} else if nextWord != KwPod && nextWord != KwDeployment && nextWord != KwService && nextWord != KwFile && nextWord != KwApp {
-				ctx.Namespace = nextWord
-				*index++
+				// This is likely a namespace
+				nsName := collectResourceName(args, i+1)
+				ctx.Namespace = nsName.name
+				*index += nsName.wordCount
 			}
 		}
 		return true
 	}
 	return false
+}
+
+// resourceNameResult holds the collected resource name and word count
+type resourceNameResult struct {
+	name      string
+	wordCount int
+}
+
+// collectResourceName collects consecutive words until hitting a keyword or preposition
+// Returns the collected name (space-separated) and the number of words consumed
+func collectResourceName(args []string, startIndex int) resourceNameResult {
+	if startIndex >= len(args) {
+		return resourceNameResult{"", 0}
+	}
+
+	var words []string
+	keywords := map[string]bool{
+		PrepIn: true, PrepFrom: true, PrepOf: true, PrepTo: true, PrepInto: true,
+		KwApp: true, KwPod: true, KwDeployment: true, KwService: true, KwNamespace: true, KwFile: true,
+		"with": true, "follow": true, "prefix": true, "search": true, "find": true, "filter": true,
+		"grep": true, "max": true, "port": true,
+	}
+
+	for i := startIndex; i < len(args); i++ {
+		word := args[i]
+		wordLower := strings.ToLower(word)
+
+		// Stop at keywords, prepositions, or flags
+		if keywords[wordLower] || strings.HasPrefix(word, "-") || stopWords[wordLower] {
+			break
+		}
+
+		words = append(words, word)
+	}
+
+	if len(words) == 0 {
+		return resourceNameResult{"", 0}
+	}
+
+	// Join with spaces (will be converted to hyphens by resolver)
+	name := strings.Join(words, " ")
+	return resourceNameResult{name, len(words)}
 }
 
 func parseDefault(word string, input string, ctx *Context) {

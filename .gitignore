@@ -35,3 +35,9 @@ Thumbs.db
 # Local development
 TODO.md
 scripts/release.sh
+skube-config.json
+
+# Cluster patterns cache (context-specific, local only)
+cluster_patterns.json
+patterns/
+resource-cache/

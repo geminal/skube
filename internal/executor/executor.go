@@ -409,6 +409,14 @@ func handleConfig(ctx *parser.Context) error {
 	if ctx.ResourceType == "view" {
 		fmt.Printf("%s⚙️  Current Configuration%s\n", config.ColorCyan, config.ColorReset)
 		return runKubectl([]string{"config", "view", "--minify"}, ctx.DryRun)
+	} else if ctx.ResourceType == "show-context" {
+		// Show current context
+		fmt.Printf("%s🎯 Current Context%s\n", config.ColorCyan, config.ColorReset)
+		return runKubectl([]string{"config", "current-context"}, ctx.DryRun)
+	} else if ctx.ResourceType == "list-contexts" {
+		// List all contexts
+		fmt.Printf("%s📋 Available Contexts%s\n", config.ColorCyan, config.ColorReset)
+		return runKubectl([]string{"config", "get-contexts"}, ctx.DryRun)
 	} else if ctx.ResourceType == "context" {
 		if ctx.ResourceName == "" {
 			return fmt.Errorf("need context name\nUsage: skube use context <name>")

@@ -126,6 +126,14 @@ func TestParseNaturalLanguage(t *testing.T) {
 				Namespace:  "qa",
 			},
 		},
+		{
+			name: "Single string input",
+			args: []string{"get pods in qa"},
+			expected: &Context{
+				Command:   "pods",
+				Namespace: "qa",
+			},
+		},
 	}
 
 	for _, tt := range tests {

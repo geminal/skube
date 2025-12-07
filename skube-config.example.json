@@ -1,0 +1,30 @@
+{
+  "enabled": true,
+  "provider": "ollama",
+  "use_docker": true,
+  "model": "qwen2.5-coder:3b",
+  "openai_api_key": "",
+  "openai_model": "gpt-4o-mini",
+  "_comment": "This config makes the local AI model MUCH smarter about YOUR cluster!",
+  "_instructions": "1. Copy: cp skube-config.example.json skube-config.json  2. Customize below  3. Run: skube config-ai skube-config.json",
+  "_provider_options": "ollama (free, local) or openai (requires API key)",
+  "common_apps": [
+    "_tip": "Add your actual app/deployment names - helps AI recognize typos and partial names",
+    "_example": "my-web-app, my-api-service, my-worker"
+  ],
+  "namespaces": [
+    "_tip": "List your actual namespaces - helps AI recognize and fix typos",
+    "_example": "namespace-a, namespace-b, default"
+  ],
+  "app_patterns": [
+    "_tip": "Describe YOUR naming conventions - helps AI understand your cluster's patterns",
+    "_example1": "Apps are named with pattern: {service-name}-{environment}",
+    "_example2": "Backend services end with '-service'",
+    "_example3": "All apps have 'app' label matching deployment name"
+  ],
+  "custom_hints": {
+    "_tip": "Add any cluster-specific context that helps AI understand your commands",
+    "_example_naming": "We use hyphens between words, not underscores or spaces",
+    "_example_labels": "When user asks about 'labels', they usually want to see deployments"
+  }
+}
